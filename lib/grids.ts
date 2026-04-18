@@ -1,6 +1,6 @@
 import {
   collection, addDoc, deleteDoc, doc,
-  onSnapshot, query, where, Timestamp,
+  onSnapshot, Timestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -19,9 +19,8 @@ export interface GridDoc {
   savedAt: Timestamp;
 }
 
-export function subscribeGrids(uid: string, cb: (grids: GridDoc[]) => void) {
-  const q = query(collection(db, 'grids'), where('uid', '==', uid));
-  return onSnapshot(q, snap =>
+export function subscribeGrids(cb: (grids: GridDoc[]) => void) {
+  return onSnapshot(collection(db, 'grids'), snap =>
     cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as GridDoc)))
   );
 }

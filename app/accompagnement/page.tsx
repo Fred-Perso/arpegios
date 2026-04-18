@@ -251,10 +251,10 @@ export default function AccompagnementPage() {
     return unsub;
   }, []);
 
-  // Firestore grids subscription
+  // Firestore grids subscription — wait for auth before subscribing
   useEffect(() => {
     if (!user) return;
-    return subscribeGrids(user.uid, setSavedGrids);
+    return subscribeGrids(setSavedGrids);
   }, [user]);
 
   // Cleanup audio on unmount
@@ -711,10 +711,12 @@ export default function AccompagnementPage() {
                     className="px-2.5 py-1 rounded text-xs bg-blue-700 hover:bg-blue-600 text-white disabled:opacity-40 transition-colors">
                     Charger
                   </button>
-                  <button onClick={() => handleDelete(g.id)}
-                    className="px-2 py-1 rounded text-xs bg-gray-700 hover:bg-red-800 text-gray-400 hover:text-white transition-colors">
-                    ✕
-                  </button>
+                  {(!g.uid || g.uid === user?.uid) && (
+                    <button onClick={() => handleDelete(g.id)}
+                      className="px-2 py-1 rounded text-xs bg-gray-700 hover:bg-red-800 text-gray-400 hover:text-white transition-colors">
+                      ✕
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
