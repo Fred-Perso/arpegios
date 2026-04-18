@@ -165,6 +165,86 @@ export default function IntervallesPage() {
           <p className="text-gray-500 text-xs text-center">*tierce juste n'existe pas — c'est une quinte, mais entre le 3 et le 5 on saute directement</p>
         </Box>
 
+        {/* KEY EXPLANATION: why minor chords in a major key */}
+        <Box color="bg-indigo-900/30 border border-indigo-700">
+          <h2 className="text-xl font-bold text-indigo-200">⚡ La question clé : pourquoi des accords mineurs dans une tonalité majeure ?</h2>
+          <p className="text-gray-300 leading-relaxed">
+            C'est <strong className="text-white">la</strong> question que tout le monde se pose. La réponse tient en une phrase :
+            <strong className="text-indigo-300"> ce n'est pas la tonalité qui décide si un accord est majeur ou mineur — c'est la distance entre les notes de la gamme.</strong>
+          </p>
+          <div className="bg-gray-900 rounded-xl p-4 space-y-3 text-sm">
+            <p className="text-white font-semibold">Voyons pourquoi le II est mineur en Do majeur :</p>
+            <p className="text-gray-300">
+              La gamme de Do majeur : <span className="font-mono text-orange-300">C – D – E – F – G – A – B</span>
+            </p>
+            <p className="text-gray-300">
+              On construit un accord sur <span className="text-blue-300 font-bold">Re (D)</span> en utilisant
+              <strong className="text-white"> uniquement les notes de la gamme de Do</strong> (on ne choisit pas — la gamme impose ses notes).
+            </p>
+            <div className="flex flex-wrap gap-3 text-xs font-mono">
+              <span className="bg-blue-900/50 border border-blue-700 rounded px-2 py-1 text-blue-300">D <span className="text-gray-400">(racine)</span></span>
+              <span className="text-gray-500">+</span>
+              <span className="bg-gray-800 rounded px-2 py-1">F <span className="text-gray-400">= 3 demi-tons = tierce <strong className="text-red-400">mineure</strong></span></span>
+              <span className="text-gray-500">+</span>
+              <span className="bg-gray-800 rounded px-2 py-1">A <span className="text-gray-400">= 7 demi-tons = quinte juste</span></span>
+              <span className="text-gray-500">+</span>
+              <span className="bg-gray-800 rounded px-2 py-1">C <span className="text-gray-400">= 10 demi-tons = 7e mineure</span></span>
+            </div>
+            <div className="bg-indigo-900/40 rounded-lg p-3 border border-indigo-800">
+              <p className="text-indigo-200 font-semibold">
+                La tierce entre D et F n'est que de <strong>3 demi-tons</strong> (D→D#→E→F).
+                C'est une tierce <strong>mineure</strong>. Voilà pourquoi Dm7 est mineur :
+                pas parce qu'on a "décidé" de le rendre mineur, mais parce que la gamme de Do
+                ne contient pas de F# (qui serait la tierce majeure de D).
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-gray-900 rounded-xl p-4 space-y-3 text-sm mt-2">
+            <p className="text-white font-semibold">Comparaison : I△7 vs II m7</p>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <p className="text-amber-300 font-bold">C△7 (degré I — MAJEUR)</p>
+                <p className="text-gray-400 font-mono text-xs">C → E : 4 demi-tons = tierce <strong className="text-green-400">majeure</strong></p>
+                <p className="text-gray-400 font-mono text-xs">C – <strong className="text-green-400">E</strong> – G – B</p>
+                <p className="text-gray-500 text-xs">Le E naturel est dans la gamme → accord MAJEUR</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-blue-300 font-bold">Dm7 (degré II — MINEUR)</p>
+                <p className="text-gray-400 font-mono text-xs">D → F : 3 demi-tons = tierce <strong className="text-red-400">mineure</strong></p>
+                <p className="text-gray-400 font-mono text-xs">D – <strong className="text-red-400">F</strong> – A – C</p>
+                <p className="text-gray-500 text-xs">Pas de F# dans Do majeur → accord MINEUR</p>
+              </div>
+            </div>
+            <p className="text-gray-400 text-xs pt-1 border-t border-gray-800">
+              <strong className="text-white">Règle :</strong> c'est le 3e demi-ton de l'accord qui décide.
+              Tierce majeure (4 demi-tons) → accord majeur. Tierce mineure (3 demi-tons) → accord mineur.
+              La gamme impose les distances — et c'est pour ça que certains degrés "deviennent" mineurs.
+            </p>
+          </div>
+
+          <div className="bg-gray-900 rounded-xl p-4 text-sm">
+            <p className="text-white font-semibold mb-2">Récapitulatif pour Do majeur :</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
+              {[
+                {deg:'I – C',  third:'C→E = 4',  type:'MAJEUR', color:'text-amber-300'},
+                {deg:'II – D', third:'D→F = 3',  type:'mineur', color:'text-blue-300'},
+                {deg:'III – E',third:'E→G = 3',  type:'mineur', color:'text-blue-300'},
+                {deg:'IV – F', third:'F→A = 4',  type:'MAJEUR', color:'text-amber-300'},
+                {deg:'V – G',  third:'G→B = 4',  type:'MAJEUR', color:'text-red-300'},
+                {deg:'VI – A', third:'A→C = 3',  type:'mineur', color:'text-blue-300'},
+                {deg:'VII – B',third:'B→D = 3',  type:'dim.', color:'text-purple-300'},
+              ].map(r=>(
+                <div key={r.deg} className="bg-gray-800 rounded p-2">
+                  <p className={`font-bold ${r.color}`}>{r.deg}</p>
+                  <p className="text-gray-500">{r.third} demi-t.</p>
+                  <p className={r.color}>{r.type}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Box>
+
         <Box>
           <h2 className="text-xl font-bold">4. Les 4 types d'accords et leurs intervalles</h2>
           <div className="space-y-3 text-sm">

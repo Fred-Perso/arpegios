@@ -23,18 +23,18 @@ export default function Fretboard({
 }: Props) {
   const isPanel = variant === 'panel';
 
-  const W            = isPanel ? 240 : 720;
-  const H            = isPanel ? 140 : 200;
-  const LEFT_MARGIN  = isPanel ? 10  : 36;
-  const RIGHT_MARGIN = isPanel ? 8   : 20;
-  const TOP_MARGIN   = isPanel ? 18  : 28;
-  const BOT_MARGIN   = isPanel ? 18  : 28;
+  const W            = isPanel ? 148 : 720;
+  const H            = isPanel ? 86  : 200;
+  const LEFT_MARGIN  = isPanel ? 8   : 36;
+  const RIGHT_MARGIN = isPanel ? 5   : 20;
+  const TOP_MARGIN   = isPanel ? 13  : 28;
+  const BOT_MARGIN   = isPanel ? 12  : 28;
 
   const numFrets = fretMax - fretMin + 1;
   const fretW    = (W - LEFT_MARGIN - RIGHT_MARGIN) / numFrets;
   const stringH  = (H - TOP_MARGIN - BOT_MARGIN) / 5;
-  const dotR     = isPanel ? 10 : 12;
-  const fontSize = isPanel ? 8  : 9;
+  const dotR     = isPanel ? 7  : 12;
+  const fontSize = isPanel ? 6  : 9;
 
   const fretX  = (f: number) => LEFT_MARGIN + (f - fretMin + 0.5) * fretW;
   const stringY = (s: number) => TOP_MARGIN + (5 - s) * stringH;

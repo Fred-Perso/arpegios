@@ -6,11 +6,10 @@ import {
   ARPEGGIO_SYMBOL, getArpeggioPositions, getChordName, HarmonyMode,
 } from '@/lib/music';
 
-const Fretboard         = dynamic(() => import('@/components/Fretboard'),         { ssr: false });
-const FretboardVertical = dynamic(() => import('@/components/FretboardVertical'), { ssr: false });
-const PositionsPanel    = dynamic(() => import('@/components/PositionsPanel'),    { ssr: false });
-const PlayButton        = dynamic(() => import('@/components/PlayButton'),        { ssr: false });
-const FavoritesPanel    = dynamic(() => import('@/components/FavoritesPanel'),   { ssr: false });
+const Fretboard      = dynamic(() => import('@/components/Fretboard'),      { ssr: false });
+const PositionsPanel = dynamic(() => import('@/components/PositionsPanel'), { ssr: false });
+const PlayButton     = dynamic(() => import('@/components/PlayButton'),     { ssr: false });
+const FavoritesPanel = dynamic(() => import('@/components/FavoritesPanel'), { ssr: false });
 
 const TYPE_BG: Record<string, string> = {
   Maj7:    'bg-amber-900/40 text-amber-300 border-amber-700',
@@ -33,17 +32,14 @@ export default function Home() {
   const chordType  = DEGREE_CHORD_TYPE[mode][degreeIndex];
   const chordName  = getChordName(keyNote, degreeIndex, mode);
   const positions  = getArpeggioPositions(keyNote, degreeIndex, fretMin, fretMax, mode);
-  // Vertical always shows 0–12
-  const posVert    = getArpeggioPositions(keyNote, degreeIndex, 0, 12, mode);
   const noteLabels = DEGREE_NOTE_NAMES[chordType];
 
   return (
     <main className="min-h-screen bg-gray-900 text-white px-3 py-5">
-      <div className="max-w-screen-2xl mx-auto space-y-4">
+      <div className="max-w-5xl mx-auto space-y-4">
 
         {/* ── Controls ── */}
         <div className="bg-gray-800 rounded-2xl p-4 space-y-4">
-          {/* Harmony mode */}
           <div className="flex gap-2">
             {(['major', 'melodicMinor'] as HarmonyMode[]).map(m => (
               <button key={m} onClick={() => { setMode(m); setDegreeIndex(0); }}
@@ -54,7 +50,6 @@ export default function Home() {
             ))}
           </div>
 
-          {/* Key + transpose */}
           <div>
             <label className="block text-xs text-gray-400 uppercase tracking-wider mb-2">Tonalité</label>
             <div className="flex flex-wrap items-center gap-2">
@@ -72,7 +67,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Degree */}
           <div>
             <label className="block text-xs text-gray-400 uppercase tracking-wider mb-2">Degré</label>
             <div className="flex flex-wrap gap-2">
@@ -90,7 +84,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Fret range + actions */}
           <div className="flex flex-wrap gap-4 items-end">
             <div>
               <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1">Frette min</label>
@@ -114,60 +107,37 @@ export default function Home() {
         </div>
 
         {/* ── Chord info ── */}
-        <div className={`rounded-2xl px-5 py-3 border flex items-center justify-between ${TYPE_BG[chordType]}`}>
+        <div className={`rounded-2xl px-5 py-3 border flex items-center justify-between gap-4 ${TYPE_BG[chordType]}`}>
           <div className="flex items-baseline gap-3">
             <span className="text-3xl font-bold">{chordName}</span>
             <span className="opacity-70">{chordType}</span>
           </div>
-          <div className="flex gap-3 text-sm opacity-80">
+          <div className="flex gap-3 text-sm opacity-80 flex-wrap">
             {noteLabels.map((n, i) => <span key={i}>{n}</span>)}
           </div>
         </div>
 
-        {/* ── Main layout: left (fretboard + 5 positions) / right (vertical) ── */}
-        <div className="flex flex-col xl:flex-row gap-4">
+        {/* ── Main fretboard ── */}
+        <div className="bg-gray-800 rounded-2xl p-4">
+          <Fretboard
+            positions={positions}
+            arpeggioType={chordType}
+            fretMin={fretMin}
+            fretMax={fretMax}
+            showNotes={showNotes}
+            variant="full"
+          />
+        </div>
 
-          {/* Left column */}
-          <div className="flex-1 min-w-0 space-y-4">
-            {/* Horizontal fretboard */}
-            <div className="bg-gray-800 rounded-2xl p-4">
-              <Fretboard
-                positions={positions}
-                arpeggioType={chordType}
-                fretMin={fretMin}
-                fretMax={fretMax}
-                showNotes={showNotes}
-                variant="full"
-              />
-            </div>
-
-            {/* 5 positions 2-2-1 */}
-            <div className="bg-gray-800 rounded-2xl p-4">
-              <PositionsPanel
-                keyNote={keyNote}
-                degreeIndex={degreeIndex}
-                arpeggioType={chordType}
-                mode={mode}
-                showNotes={showNotes}
-              />
-            </div>
-          </div>
-
-          {/* Right column: vertical fretboard */}
-          <div className="xl:w-52 shrink-0">
-            <div className="bg-gray-800 rounded-2xl p-4 flex flex-col items-center">
-              <p className="text-xs text-gray-400 uppercase tracking-wider mb-3 self-start">
-                Manche vertical (0–12)
-              </p>
-              <FretboardVertical
-                positions={posVert}
-                arpeggioType={chordType}
-                fretMin={0}
-                fretMax={12}
-                showNotes={showNotes}
-              />
-            </div>
-          </div>
+        {/* ── 5 positions 2-2-1 ── */}
+        <div className="bg-gray-800 rounded-2xl p-4">
+          <PositionsPanel
+            keyNote={keyNote}
+            degreeIndex={degreeIndex}
+            arpeggioType={chordType}
+            mode={mode}
+            showNotes={showNotes}
+          />
         </div>
 
         {/* ── Favorites ── */}
