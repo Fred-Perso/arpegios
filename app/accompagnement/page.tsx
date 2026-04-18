@@ -249,6 +249,34 @@ function buildWalkingBass(Tone: any, events: EvItem[], totalBeats: number, bus: 
   return { bassInst, bassPart };
 }
 
+// ─── Jazz comp patterns (4 bars, then repeats) ───────────────────────────────
+// n = [root, 3rd, 5th, 7th]  |  beatOffset = position within the chord (0–3)
+type CompHit = { beatOffset: number; notes: string[]; dur: string; vel: number };
+
+function getCompHits(barIdx: number, n: string[]): CompHit[] {
+  switch (barIdx % 4) {
+    case 0: return [ // "Derrière le temps" — 2, 3, 4
+      { beatOffset: 1, notes: [n[1], n[3]],       dur: '4n', vel: 0.70 },
+      { beatOffset: 2, notes: [n[0], n[2]],       dur: '4n', vel: 0.60 },
+      { beatOffset: 3, notes: [n[1], n[2], n[3]], dur: '8n', vel: 0.48 },
+    ];
+    case 1: return [ // "Deux et quatre" — 2, 4
+      { beatOffset: 1, notes: n,                  dur: '4n', vel: 0.72 },
+      { beatOffset: 3, notes: [n[1], n[3]],       dur: '8n', vel: 0.55 },
+    ];
+    case 2: return [ // "Anticipation" — 1 léger, 3, 4
+      { beatOffset: 0, notes: [n[0], n[2]],       dur: '4n', vel: 0.48 },
+      { beatOffset: 2, notes: [n[1], n[3]],       dur: '4n', vel: 0.68 },
+      { beatOffset: 3, notes: [n[1], n[2], n[3]], dur: '8n', vel: 0.44 },
+    ];
+    case 3: return [ // "Call & response" — 2, 3
+      { beatOffset: 1, notes: [n[1], n[3]],       dur: '4n', vel: 0.65 },
+      { beatOffset: 2, notes: [n[1], n[2], n[3]], dur: '4n', vel: 0.62 },
+    ];
+    default: return [];
+  }
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 export default function AccompagnementPage() {
   const [title,        setTitle]        = useState('Fly Me to the Moon');
@@ -407,18 +435,16 @@ export default function AccompagnementPage() {
       const compEvents: PV[] = [];
       events.forEach(ev => {
         const n = ev.chord.notes; // [root, 3rd/m3, 5th, 7th]
-        // Marker for chord highlight (always on beat 1 of chord)
+        // Marker on beat 1 (chord highlight only, no notes)
         compEvents.push({ time: bt(ev.beatStart), notes: null, dur: '', vel: 0, flatIdx: ev.flatIdx });
 
         if (ev.chord.beats >= 4) {
-          // Beat 2: shell — 3rd + 7th (rootless voicing)
-          compEvents.push({ time: bt(ev.beatStart + 1), notes: [n[1], n[3]],       dur: '4n', vel: 0.70, flatIdx: null });
-          // Beat 3: upper — root (oct) + 5th
-          compEvents.push({ time: bt(ev.beatStart + 2), notes: [n[0], n[2]],       dur: '4n', vel: 0.60, flatIdx: null });
-          // Beat 4: closing — 3rd + 5th + 7th (anticipation)
-          compEvents.push({ time: bt(ev.beatStart + 3), notes: [n[1], n[2], n[3]], dur: '8n', vel: 0.50, flatIdx: null });
+          // Pattern cycles every 4 bars
+          getCompHits(ev.barIdx, n).forEach(hit =>
+            compEvents.push({ time: bt(ev.beatStart + hit.beatOffset), notes: hit.notes, dur: hit.dur, vel: hit.vel, flatIdx: null })
+          );
         } else {
-          // 2-beat chord: single hit on beat 1 with all notes
+          // 2-beat chord: one hit on beat 1
           compEvents.push({ time: bt(ev.beatStart), notes: n, dur: '2n', vel: 0.72, flatIdx: null });
         }
       });
