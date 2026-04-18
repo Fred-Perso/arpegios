@@ -110,3 +110,23 @@ export function getNoteAt(string: number, fret: number): string {
 
 export const FRET_MARKERS        = [3, 5, 7, 9, 12];
 export const DOUBLE_FRET_MARKERS = [12];
+
+// Returns up to 8 notes covering 2 octaves, sorted by ascending pitch, deduplicated
+export function getArpeggioVoicing2Oct(
+  keyNote: number, degreeIndex: number, mode: HarmonyMode,
+): { freq: number; degreeIndex: DegreeIndex }[] {
+  const all = getArpeggioPositions(keyNote, degreeIndex, 0, 16, mode);
+  all.sort((a, b) => fretToFreq(a.string, a.fret) - fretToFreq(b.string, b.fret));
+
+  const voicing: { freq: number; degreeIndex: DegreeIndex }[] = [];
+  let lastFreq = 0;
+  for (const pos of all) {
+    const freq = fretToFreq(pos.string, pos.fret);
+    if (freq / lastFreq > 1.002) {   // skip near-identical pitches (same note, different string)
+      voicing.push({ freq, degreeIndex: pos.degreeIndex });
+      lastFreq = freq;
+      if (voicing.length >= 8) break;
+    }
+  }
+  return voicing;
+}

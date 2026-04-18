@@ -159,6 +159,20 @@ export default function TutoPage() {
           </ol>
         </Section>
 
+        {/* Links to detailed courses */}
+        <div className="grid sm:grid-cols-2 gap-4">
+          <Link href="/tuto/intervalles"
+            className="bg-gray-800 hover:bg-gray-700 rounded-2xl p-5 transition-colors group">
+            <p className="text-orange-400 font-bold text-lg group-hover:text-orange-300">Cours : Intervalles →</p>
+            <p className="text-gray-400 text-sm mt-1">Comprendre les demi-tons, la construction des accords à 4 sons, schémas interactifs.</p>
+          </Link>
+          <Link href="/tuto/deux-cinq-un"
+            className="bg-gray-800 hover:bg-gray-700 rounded-2xl p-5 transition-colors group">
+            <p className="text-orange-400 font-bold text-lg group-hover:text-orange-300">Cours : II–V–I pour les nuls →</p>
+            <p className="text-gray-400 text-sm mt-1">La progression fondamentale du jazz — rôle de chaque accord, triton, exercices pratiques dans 12 tonalités.</p>
+          </Link>
+        </div>
+
         <div className="text-center">
           <Link href="/"
             className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-400 text-white font-semibold px-6 py-3 rounded-xl transition-colors">
