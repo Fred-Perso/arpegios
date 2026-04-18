@@ -15,6 +15,8 @@ export interface GridDoc {
   id: string;
   uid: string;
   name: string;
+  key?: string;
+  tips?: string;
   bars: { chords: StoredChord[] }[];
   savedAt: Timestamp;
 }
@@ -29,9 +31,13 @@ export async function saveGrid(
   uid: string,
   name: string,
   bars: { chords: StoredChord[] }[],
+  key?: string,
+  tips?: string,
 ): Promise<void> {
   await addDoc(collection(db, 'grids'), {
     uid, name,
+    ...(key  ? { key  } : {}),
+    ...(tips ? { tips } : {}),
     bars: bars.map(bar => ({ chords: bar.chords.map(({ rootIdx, type, beats }) => ({ rootIdx, type, beats })) })),
     savedAt: Timestamp.now(),
   });

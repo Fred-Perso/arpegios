@@ -255,23 +255,19 @@ type CompHit = { beatOffset: number; notes: string[]; dur: string; vel: number }
 
 function getCompHits(barIdx: number, n: string[]): CompHit[] {
   switch (barIdx % 4) {
-    case 0: return [ // "Derrière le temps" — 2, 3, 4
-      { beatOffset: 1, notes: [n[1], n[3]],       dur: '4n', vel: 0.70 },
-      { beatOffset: 2, notes: [n[0], n[2]],       dur: '4n', vel: 0.60 },
-      { beatOffset: 3, notes: [n[1], n[2], n[3]], dur: '8n', vel: 0.48 },
+    case 0: return [ // 1 hit — shell sur le 2
+      { beatOffset: 1, notes: [n[1], n[3]],       dur: '4n', vel: 0.63 },
     ];
-    case 1: return [ // "Deux et quatre" — 2, 4
-      { beatOffset: 1, notes: n,                  dur: '4n', vel: 0.72 },
-      { beatOffset: 3, notes: [n[1], n[3]],       dur: '8n', vel: 0.55 },
-    ];
-    case 2: return [ // "Anticipation" — 1 léger, 3, 4
-      { beatOffset: 0, notes: [n[0], n[2]],       dur: '4n', vel: 0.48 },
-      { beatOffset: 2, notes: [n[1], n[3]],       dur: '4n', vel: 0.68 },
-      { beatOffset: 3, notes: [n[1], n[2], n[3]], dur: '8n', vel: 0.44 },
-    ];
-    case 3: return [ // "Call & response" — 2, 3
+    case 1: return [ // 2 hits — 2 + 4 (classique jazz)
       { beatOffset: 1, notes: [n[1], n[3]],       dur: '4n', vel: 0.65 },
-      { beatOffset: 2, notes: [n[1], n[2], n[3]], dur: '4n', vel: 0.62 },
+      { beatOffset: 3, notes: [n[1], n[2], n[3]], dur: '8n', vel: 0.50 },
+    ];
+    case 2: return [ // 2 hits — 1 léger + 3
+      { beatOffset: 0, notes: [n[0], n[2]],       dur: '4n', vel: 0.42 },
+      { beatOffset: 2, notes: [n[1], n[3]],       dur: '4n', vel: 0.60 },
+    ];
+    case 3: return [ // 1 hit — close sur le 3 (espace maximum)
+      { beatOffset: 2, notes: [n[1], n[2], n[3]], dur: '4n', vel: 0.58 },
     ];
     default: return [];
   }
@@ -300,6 +296,11 @@ export default function AccompagnementPage() {
   const [importPreview,setImportPreview]= useState<{ title: string; bars: Chord[][] } | null>(null);
   const [saving,       setSaving]       = useState(false);
   const [saveError,    setSaveError]    = useState<string | null>(null);
+  const [saveKey,      setSaveKey]      = useState('');
+  const [saveTips,     setSaveTips]     = useState('');
+  const [gridKey,      setGridKey]      = useState('');
+  const [gridTips,     setGridTips]     = useState('');
+  const [transposeOffset, setTransposeOffset] = useState(0);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const samplerRef = useRef<any>(null);
@@ -550,15 +551,14 @@ export default function AccompagnementPage() {
     try {
       const wrapped = bars.map(bar => ({ chords: bar.map(({ rootIdx, type, beats }) => ({ rootIdx, type, beats })) }));
       if (user) {
-        await saveGridToDb(user.uid, name, wrapped);
+        await saveGridToDb(user.uid, name, wrapped, saveKey.trim() || undefined, saveTips.trim() || undefined);
       } else {
-        // localStorage fallback when auth unavailable
         const stored = JSON.parse(localStorage.getItem('arpegios-grids') ?? '[]');
-        stored.push({ id: Date.now().toString(), uid: '', name, bars: wrapped, savedAt: new Date().toISOString() });
+        stored.push({ id: Date.now().toString(), uid: '', name, key: saveKey.trim() || undefined, tips: saveTips.trim() || undefined, bars: wrapped, savedAt: new Date().toISOString() });
         localStorage.setItem('arpegios-grids', JSON.stringify(stored));
         setSavedGrids(stored);
       }
-      setSaveName(''); setShowSaveInput(false);
+      setSaveName(''); setSaveKey(''); setSaveTips(''); setShowSaveInput(false);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error('Save failed:', e);
@@ -572,11 +572,23 @@ export default function AccompagnementPage() {
     if (status !== 'idle') return;
     setBars(grid.bars.map(bar => bar.chords.map(sc => buildChord(sc.rootIdx, sc.type, sc.beats))));
     setTitle(grid.name);
+    setGridKey(grid.key ?? '');
+    setGridTips(grid.tips ?? '');
+    setTransposeOffset(0);
     setEditCell(null);
   }
 
   async function handleDelete(id: string) {
     await deleteGridToDb(id);
+  }
+
+  // ── Transpose ────────────────────────────────────────────────────────────────
+  function transpose(semitones: number) {
+    if (status !== 'idle') return;
+    setBars(prev => prev.map(bar =>
+      bar.map(chord => buildChord((chord.rootIdx + semitones + 12) % 12, chord.type, chord.beats))
+    ));
+    setTransposeOffset(prev => prev + semitones);
   }
 
   // ── Import ───────────────────────────────────────────────────────────────────
@@ -588,6 +600,7 @@ export default function AccompagnementPage() {
     if (!importPreview || status !== 'idle') return;
     setBars(importPreview.bars);
     setTitle(importPreview.title);
+    setGridKey(''); setGridTips(''); setTransposeOffset(0);
     setImportPreview(null); setImportText(''); setShowImport(false); setEditCell(null);
   }
 
@@ -613,11 +626,24 @@ export default function AccompagnementPage() {
         {/* Header */}
         <div>
           <Link href="/" className="text-orange-400 hover:text-orange-300 text-sm">← Retour</Link>
-          <h1 className="text-3xl font-bold mt-2">{title}</h1>
+          <div className="flex items-baseline gap-3 flex-wrap mt-2">
+            <h1 className="text-3xl font-bold">{title}</h1>
+            {gridKey && <span className="text-sm text-orange-300 font-medium">{gridKey}</span>}
+            {transposeOffset !== 0 && (
+              <span className="text-xs text-indigo-400 font-mono">
+                {transposeOffset > 0 ? `+${transposeOffset}` : transposeOffset} demi-ton{Math.abs(transposeOffset) > 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
           <p className="text-gray-400 mt-1">
             {bars.length} mesures · boucle
             {canEdit && <span className="ml-2 text-xs text-orange-400">— clic sur un accord pour l'éditer</span>}
           </p>
+          {gridTips && (
+            <p className="mt-2 text-xs text-gray-300 bg-gray-800 rounded-xl px-3 py-2 border-l-2 border-orange-500">
+              {gridTips}
+            </p>
+          )}
         </div>
 
         {/* Controls */}
@@ -668,7 +694,21 @@ export default function AccompagnementPage() {
                 <span className="font-mono text-xs text-gray-400 w-7 text-right">{drumVol}</span>
               </div>
             )}
-            <span className="text-[10px] text-gray-600 italic ml-auto">swing ternaire · ride triplet · décompte 4 temps</span>
+            <div className="flex items-center gap-1 ml-auto">
+              <span className="text-[10px] text-gray-500 mr-1">Transposer</span>
+              {[-2,-1,1,2].map(s => (
+                <button key={s} onClick={() => transpose(s)} disabled={status !== 'idle'}
+                  className="w-8 h-7 rounded text-xs font-bold bg-gray-700 hover:bg-indigo-700 text-gray-300 hover:text-white disabled:opacity-30 transition-colors">
+                  {s > 0 ? `+${s}` : s}
+                </button>
+              ))}
+              {transposeOffset !== 0 && (
+                <button onClick={() => transpose(-transposeOffset)} disabled={status !== 'idle'}
+                  className="px-2 h-7 rounded text-[10px] bg-indigo-900 hover:bg-red-900 text-indigo-300 hover:text-white disabled:opacity-30 transition-colors ml-1">
+                  ↩ 0
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -742,7 +782,7 @@ export default function AccompagnementPage() {
               className="px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-xs text-white transition-colors">
               📥 Importer
             </button>
-            <button onClick={() => { if (status === 'idle') { setBars(INITIAL); setTitle('Fly Me to the Moon'); } }}
+            <button onClick={() => { if (status === 'idle') { setBars(INITIAL); setTitle('Fly Me to the Moon'); setGridKey(''); setGridTips(''); setTransposeOffset(0); } }}
               disabled={status !== 'idle'}
               className="px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-xs text-gray-300 transition-colors disabled:opacity-40">
               ↩ Fly Me
@@ -750,19 +790,27 @@ export default function AccompagnementPage() {
           </div>
 
           {showSaveInput && (
-            <div className="flex gap-2">
-              <input value={saveName} onChange={e => setSaveName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSave()}
-                placeholder="Nom de la grille…"
-                className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-500 outline-none focus:border-orange-400" />
-              <button onClick={handleSave} disabled={saving}
-                className="px-4 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-sm font-bold text-white transition-colors disabled:opacity-60">
-                {saving ? '…' : 'OK'}
-              </button>
-              <button onClick={() => { setShowSaveInput(false); setSaveError(null); }}
-                className="px-3 py-1.5 rounded-lg bg-gray-700 text-sm text-gray-400 hover:text-white transition-colors">
-                ✕
-              </button>
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <input value={saveName} onChange={e => setSaveName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSave()}
+                  placeholder="Nom du morceau…"
+                  className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-500 outline-none focus:border-orange-400" />
+                <button onClick={handleSave} disabled={saving}
+                  className="px-4 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-sm font-bold text-white transition-colors disabled:opacity-60">
+                  {saving ? '…' : 'OK'}
+                </button>
+                <button onClick={() => { setShowSaveInput(false); setSaveError(null); setSaveKey(''); setSaveTips(''); }}
+                  className="px-3 py-1.5 rounded-lg bg-gray-700 text-sm text-gray-400 hover:text-white transition-colors">
+                  ✕
+                </button>
+              </div>
+              <input value={saveKey} onChange={e => setSaveKey(e.target.value)}
+                placeholder="Tonalité (ex: La mineur, Fa majeur…)"
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-500 outline-none focus:border-orange-400" />
+              <textarea value={saveTips} onChange={e => setSaveTips(e.target.value)}
+                rows={2} placeholder="Conseils sur la grille (approche, difficultés, substitutions…)"
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-500 outline-none focus:border-orange-400 resize-none" />
             </div>
           )}
           {saveError && <p className="text-xs text-red-400">{saveError}</p>}
@@ -810,8 +858,14 @@ export default function AccompagnementPage() {
             <div className="space-y-1.5">
               {savedGrids.map(g => (
                 <div key={g.id} className="flex items-center gap-2 bg-gray-900 rounded-lg px-3 py-2">
-                  <span className="text-sm text-white flex-1 font-medium">{g.name}</span>
-                  <span className="text-xs text-gray-500">{g.bars.length} mes.</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-sm text-white font-medium">{g.name}</span>
+                      {g.key && <span className="text-xs text-orange-400">{g.key}</span>}
+                      <span className="text-xs text-gray-600">{g.bars.length} mes.</span>
+                    </div>
+                    {g.tips && <p className="text-xs text-gray-500 truncate mt-0.5">{g.tips}</p>}
+                  </div>
                   <button onClick={() => loadGrid(g)} disabled={status !== 'idle'}
                     className="px-2.5 py-1 rounded text-xs bg-blue-700 hover:bg-blue-600 text-white disabled:opacity-40 transition-colors">
                     Charger
