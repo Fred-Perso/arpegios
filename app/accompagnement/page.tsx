@@ -1,10 +1,17 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
+import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
+import {
+  subscribeGrids,
+  saveGrid  as saveGridToDb,
+  deleteGrid as deleteGridToDb,
+  type GridDoc, type StoredChord,
+} from '@/lib/grids';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-type Chord     = { name: string; notes: string[]; beats: number; type: string; rootIdx: number };
-type SavedGrid = { name: string; bars: Chord[][]; savedAt: string };
+type Chord = { name: string; notes: string[]; beats: number; type: string; rootIdx: number };
 
 // ─── Piano ───────────────────────────────────────────────────────────────────
 const BASE_URL = 'https://tonejs.github.io/audio/salamander/';
@@ -81,6 +88,107 @@ const COL_BTN: Record<string, string> = {
   mMaj7:'bg-teal-700 text-white', dim7:'bg-rose-700 text-white',
 };
 
+// ─── Import parser ───────────────────────────────────────────────────────────
+/*
+  FORMAT LEAD SHEET TEXTE
+  ────────────────────────
+  # Titre (ligne optionnelle)
+  | Am7 | Dm7 | G7 | Cmaj7 |
+  | Fmaj7 | Bm7b5 E7 | Am7 | E7 |
+
+  Règles :
+  • Lignes commençant par # → titre
+  • Barres verticales | séparent les mesures
+  • Plusieurs accords dans une mesure = séparés par espace (2 accords = 2 temps chacun)
+  • Fondamentales : C C# Db D D# Eb E F F# Gb G G# Ab A A# Bb B
+  • Suffixes acceptés :
+      maj7 △7 M7          → Maj7
+      m7  min7            → m7
+      7   dom7            → Dom7 (dominant)
+      m7b5  ø  ø7         → m7b5
+      mMaj7  m△7  mM7     → mMaj7
+      dim7  °7  o7  dim   → dim7
+*/
+
+const FLAT_ROOTS: Record<string, string> = {
+  Bb:'A#', Eb:'D#', Ab:'G#', Db:'C#', Gb:'F#',
+};
+
+function parseChordType(suffix: string): string | null {
+  const s = suffix.replace(/\s/g, '');
+  // mMaj7 must be checked before m7 and Maj7
+  if (/^(mmaj7?|m[△Δ]7?|minmaj7?|mm7?)$/i.test(s)) return 'mMaj7';
+  // m7b5 before m7
+  if (/^(m7b5|m-5|min7b5|[øo]7?|half-?dim7?)$/i.test(s)) return 'm7b5';
+  // dim7
+  if (/^(dim7?|[°o]7?)$/i.test(s)) return 'dim7';
+  // Maj7 (△ is U+25B3, Δ is U+0394)
+  if (/^(maj7?|[△Δ]7?|M7?)$/.test(s) || s === '') return 'Maj7';
+  // m7 before bare "7"
+  if (/^(m7?|min7?)$/i.test(s)) return 'm7';
+  // Dom7
+  if (/^(7|dom7?|dominant7?)$/i.test(s)) return 'Dom7';
+  return null;
+}
+
+function parseChordName(token: string): StoredChord | null {
+  token = token.trim();
+  if (!token) return null;
+
+  let root: string;
+  let rest: string;
+
+  // 2-char flat root (Bb, Eb…)
+  const twoChar = token.slice(0, 2);
+  if (FLAT_ROOTS[twoChar]) {
+    root = FLAT_ROOTS[twoChar]; rest = token.slice(2);
+  } else if (token.length >= 2 && token[1] === '#') {
+    root = token.slice(0, 2); rest = token.slice(2);
+  } else if (/^[A-G]/.test(token)) {
+    root = token[0]; rest = token.slice(1);
+  } else return null;
+
+  const rootIdx = (NOTES as readonly string[]).indexOf(root);
+  if (rootIdx === -1) return null;
+
+  const type = parseChordType(rest);
+  if (!type) return null;
+
+  return { rootIdx, type, beats: 4 };
+}
+
+export function importFromText(text: string): { title: string; bars: Chord[][] } | null {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return null;
+
+  let title = 'Grille importée';
+  const parsedBars: Chord[][] = [];
+
+  for (const line of lines) {
+    if (line.startsWith('#')) { title = line.slice(1).trim(); continue; }
+
+    // Split on | and process each segment as a bar
+    const segments = line.split('|').map(s => s.trim()).filter(Boolean);
+    for (const seg of segments) {
+      const tokens = seg.split(/\s+/).filter(Boolean);
+      if (!tokens.length) continue;
+
+      // Max 2 chords per bar
+      const chordTokens = tokens.slice(0, 2);
+      const beats = chordTokens.length === 1 ? 4 : 2;
+      const bar: Chord[] = [];
+
+      for (const tok of chordTokens) {
+        const sc = parseChordName(tok);
+        if (sc) bar.push(buildChord(sc.rootIdx, sc.type, beats));
+      }
+      if (bar.length) parsedBars.push(bar);
+    }
+  }
+
+  return parsedBars.length ? { title, bars: parsedBars } : null;
+}
+
 // ─── Event builder ───────────────────────────────────────────────────────────
 type EvItem = { chord: Chord; barIdx: number; flatIdx: number; beatStart: number };
 function buildEvents(bars: Chord[][]): { events: EvItem[]; totalBeats: number } {
@@ -106,9 +214,14 @@ export default function AccompagnementPage() {
   const [editCell,     setEditCell]     = useState<{ barIdx: number; chordIdx: number } | null>(null);
   const [editRoot,     setEditRoot]     = useState(9);
   const [editType,     setEditType]     = useState('m7');
-  const [savedGrids,   setSavedGrids]   = useState<SavedGrid[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [user,         setUser]         = useState<any>(null);
+  const [savedGrids,   setSavedGrids]   = useState<GridDoc[]>([]);
   const [saveName,     setSaveName]     = useState('');
   const [showSaveInput,setShowSaveInput]= useState(false);
+  const [showImport,   setShowImport]   = useState(false);
+  const [importText,   setImportText]   = useState('');
+  const [importPreview,setImportPreview]= useState<{ title: string; bars: Chord[][] } | null>(null);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const samplerRef = useRef<any>(null);
@@ -119,9 +232,25 @@ export default function AccompagnementPage() {
   const loadedRef  = useRef(false);
   const playIdRef  = useRef(0);
 
+  // Firebase anonymous auth
   useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem('arpegios-grids') ?? '[]');
-    setSavedGrids(saved);
+    const unsub = onAuthStateChanged(auth, async u => {
+      try {
+        if (!u) { const { user: anon } = await signInAnonymously(auth); setUser(anon); }
+        else setUser(u);
+      } catch (e) { console.warn('Firebase auth failed:', e); }
+    });
+    return unsub;
+  }, []);
+
+  // Firestore grids subscription
+  useEffect(() => {
+    if (!user) return;
+    return subscribeGrids(user.uid, setSavedGrids);
+  }, [user]);
+
+  // Cleanup audio on unmount
+  useEffect(() => {
     return () => { partRef.current?.dispose(); samplerRef.current?.dispose(); disposeDrums(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -303,24 +432,34 @@ export default function AccompagnementPage() {
   }
 
   // ── Archive ─────────────────────────────────────────────────────────────────
-  function saveGrid() {
-    if (!saveName.trim()) return;
-    const grid: SavedGrid = { name: saveName.trim(), bars, savedAt: new Date().toISOString() };
-    const all = [...savedGrids, grid];
-    setSavedGrids(all);
-    localStorage.setItem('arpegios-grids', JSON.stringify(all));
+  async function handleSave() {
+    if (!saveName.trim() || !user) return;
+    await saveGridToDb(
+      user.uid, saveName.trim(),
+      bars.map(bar => bar.map(({ rootIdx, type, beats }) => ({ rootIdx, type, beats }))),
+    );
     setSaveName(''); setShowSaveInput(false);
   }
 
-  function loadGrid(grid: SavedGrid) {
+  function loadGrid(grid: GridDoc) {
     if (status !== 'idle') return;
-    setBars(grid.bars); setEditCell(null);
+    setBars(grid.bars.map(bar => bar.map(sc => buildChord(sc.rootIdx, sc.type, sc.beats))));
+    setEditCell(null);
   }
 
-  function deleteGrid(idx: number) {
-    const all = savedGrids.filter((_, i) => i !== idx);
-    setSavedGrids(all);
-    localStorage.setItem('arpegios-grids', JSON.stringify(all));
+  async function handleDelete(id: string) {
+    await deleteGridToDb(id);
+  }
+
+  // ── Import ───────────────────────────────────────────────────────────────────
+  function handleParseImport() {
+    setImportPreview(importFromText(importText));
+  }
+
+  function handleConfirmImport() {
+    if (!importPreview || status !== 'idle') return;
+    setBars(importPreview.bars);
+    setImportPreview(null); setImportText(''); setShowImport(false); setEditCell(null);
   }
 
   // ── Derived ─────────────────────────────────────────────────────────────────
@@ -456,11 +595,15 @@ export default function AccompagnementPage() {
 
         {/* Archive */}
         <div className="bg-gray-800 rounded-2xl p-4 space-y-3">
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
             <p className="text-xs text-gray-400 uppercase tracking-wider">Mes grilles</p>
-            <button onClick={() => setShowSaveInput(v => !v)}
+            <button onClick={() => { setShowSaveInput(v => !v); setShowImport(false); }}
               className="ml-auto px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-xs text-white transition-colors">
               💾 Sauvegarder
+            </button>
+            <button onClick={() => { setShowImport(v => !v); setShowSaveInput(false); setImportPreview(null); }}
+              className="px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-xs text-white transition-colors">
+              📥 Importer
             </button>
             <button onClick={() => { if (status === 'idle') setBars(INITIAL); }}
               disabled={status !== 'idle'}
@@ -472,10 +615,10 @@ export default function AccompagnementPage() {
           {showSaveInput && (
             <div className="flex gap-2">
               <input value={saveName} onChange={e => setSaveName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && saveGrid()}
+                onKeyDown={e => e.key === 'Enter' && handleSave()}
                 placeholder="Nom de la grille…"
                 className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-500 outline-none focus:border-orange-400" />
-              <button onClick={saveGrid}
+              <button onClick={handleSave}
                 className="px-4 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-sm font-bold text-white transition-colors">
                 OK
               </button>
@@ -486,19 +629,56 @@ export default function AccompagnementPage() {
             </div>
           )}
 
-          {savedGrids.length === 0 ? (
+          {showImport && (
+            <div className="space-y-2">
+              <p className="text-[10px] text-gray-500 leading-relaxed">
+                Format : <code className="bg-gray-700 px-1 rounded"># Titre</code> puis{' '}
+                <code className="bg-gray-700 px-1 rounded">| Am7 | Dm7 | G7 | Cmaj7 |</code> — plusieurs accords par mesure séparés par espace.
+              </p>
+              <textarea
+                value={importText} onChange={e => setImportText(e.target.value)}
+                rows={5} placeholder={"# Mon standard\n| Am7 | Dm7 | G7 | Cmaj7 |\n| Fmaj7 | Bm7b5 E7 | Am7 | E7 |"}
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 font-mono outline-none focus:border-orange-400 resize-y" />
+              {importPreview && (
+                <div className="bg-gray-900 rounded-lg p-3 text-xs space-y-1">
+                  <p className="text-orange-300 font-bold">{importPreview.title}</p>
+                  <p className="text-gray-400">{importPreview.bars.length} mesures · {importPreview.bars.flat().map(c => c.name).join('  ')}</p>
+                  <button onClick={handleConfirmImport} disabled={status !== 'idle'}
+                    className="mt-1 px-4 py-1.5 rounded-lg bg-green-700 hover:bg-green-600 text-white font-bold text-xs disabled:opacity-40 transition-colors">
+                    ✓ Charger cette grille
+                  </button>
+                </div>
+              )}
+              {!importPreview && (
+                <div className="flex gap-2">
+                  <button onClick={handleParseImport}
+                    className="px-4 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-xs font-bold text-white transition-colors">
+                    Analyser
+                  </button>
+                  <button onClick={() => { setShowImport(false); setImportText(''); }}
+                    className="px-3 py-1.5 rounded-lg bg-gray-700 text-xs text-gray-400 hover:text-white transition-colors">
+                    Annuler
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {!user && <p className="text-xs text-gray-600 italic">Connexion en cours…</p>}
+          {user && savedGrids.length === 0 && (
             <p className="text-xs text-gray-600 italic">Aucune grille sauvegardée.</p>
-          ) : (
+          )}
+          {user && savedGrids.length > 0 && (
             <div className="space-y-1.5">
-              {savedGrids.map((g, i) => (
-                <div key={i} className="flex items-center gap-2 bg-gray-900 rounded-lg px-3 py-2">
+              {savedGrids.map(g => (
+                <div key={g.id} className="flex items-center gap-2 bg-gray-900 rounded-lg px-3 py-2">
                   <span className="text-sm text-white flex-1 font-medium">{g.name}</span>
                   <span className="text-xs text-gray-500">{g.bars.length} mes.</span>
                   <button onClick={() => loadGrid(g)} disabled={status !== 'idle'}
                     className="px-2.5 py-1 rounded text-xs bg-blue-700 hover:bg-blue-600 text-white disabled:opacity-40 transition-colors">
                     Charger
                   </button>
-                  <button onClick={() => deleteGrid(i)}
+                  <button onClick={() => handleDelete(g.id)}
                     className="px-2 py-1 rounded text-xs bg-gray-700 hover:bg-red-800 text-gray-400 hover:text-white transition-colors">
                     ✕
                   </button>
