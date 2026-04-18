@@ -3,49 +3,67 @@ import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import {
   NOTE_NAMES, DEGREE_LABELS, DEGREE_CHORD_TYPE, DEGREE_NOTE_NAMES,
-  getArpeggioPositions, getChordName,
+  ARPEGGIO_SYMBOL, getArpeggioPositions, getChordName, HarmonyMode,
 } from '@/lib/music';
 
 const Fretboard      = dynamic(() => import('@/components/Fretboard'),      { ssr: false });
-const PositionsGrid  = dynamic(() => import('@/components/PositionsGrid'),  { ssr: false });
+const PositionsPanel = dynamic(() => import('@/components/PositionsPanel'), { ssr: false });
 const PlayButton     = dynamic(() => import('@/components/PlayButton'),     { ssr: false });
 const FavoritesPanel = dynamic(() => import('@/components/FavoritesPanel'), { ssr: false });
 
-const SYMBOLS: Record<string, string> = { Maj7: '△7', m7: 'm7', Dom7: '7', m7b5: 'ø7' };
 const TYPE_BG: Record<string, string> = {
-  Maj7: 'bg-amber-900/40 text-amber-300 border-amber-700',
-  m7:   'bg-blue-900/40 text-blue-300 border-blue-700',
-  Dom7: 'bg-red-900/40 text-red-300 border-red-700',
-  m7b5: 'bg-purple-900/40 text-purple-300 border-purple-700',
+  Maj7:    'bg-amber-900/40 text-amber-300 border-amber-700',
+  m7:      'bg-blue-900/40 text-blue-300 border-blue-700',
+  Dom7:    'bg-red-900/40 text-red-300 border-red-700',
+  m7b5:    'bg-purple-900/40 text-purple-300 border-purple-700',
+  mMaj7:   'bg-teal-900/40 text-teal-300 border-teal-700',
+  'Maj7#5':'bg-cyan-900/40 text-cyan-300 border-cyan-700',
+  dim7:    'bg-rose-900/40 text-rose-300 border-rose-700',
 };
 
 export default function Home() {
+  const [mode,        setMode]        = useState<HarmonyMode>('major');
   const [keyNote,     setKeyNote]     = useState(0);
   const [degreeIndex, setDegreeIndex] = useState(0);
   const [fretMin,     setFretMin]     = useState(0);
   const [fretMax,     setFretMax]     = useState(12);
   const [showNotes,   setShowNotes]   = useState(false);
 
-  const chordType  = DEGREE_CHORD_TYPE[degreeIndex];
-  const chordName  = getChordName(keyNote, degreeIndex);
-  const positions  = getArpeggioPositions(keyNote, degreeIndex, fretMin, fretMax);
+  const chordType  = DEGREE_CHORD_TYPE[mode][degreeIndex];
+  const chordName  = getChordName(keyNote, degreeIndex, mode);
+  const positions  = getArpeggioPositions(keyNote, degreeIndex, fretMin, fretMax, mode);
   const noteLabels = DEGREE_NOTE_NAMES[chordType];
 
+  function transpose(delta: number) {
+    setKeyNote(k => (k + delta + 12) % 12);
+  }
+
   return (
-    <main className="min-h-screen bg-gray-900 text-white px-4 py-8">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <main className="min-h-screen bg-gray-900 text-white px-4 py-6">
+      <div className="max-w-7xl mx-auto space-y-5">
 
-        {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold">Arpèges Jazz</h1>
-          <p className="text-gray-400 mt-1">Harmonie majeure — arpèges à 4 sons</p>
-        </div>
+        {/* ── Controls ── */}
+        <div className="bg-gray-800 rounded-2xl p-5 space-y-4">
 
-        {/* Controls */}
-        <div className="bg-gray-800 rounded-2xl p-5 space-y-5">
+          {/* Harmony mode */}
+          <div className="flex gap-2">
+            {(['major', 'melodicMinor'] as HarmonyMode[]).map(m => (
+              <button key={m} onClick={() => { setMode(m); setDegreeIndex(0); }}
+                className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors
+                  ${mode === m ? 'bg-orange-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>
+                {m === 'major' ? 'Gamme majeure' : 'Min. mélodique'}
+              </button>
+            ))}
+          </div>
+
+          {/* Key + transpose */}
           <div>
             <label className="block text-xs text-gray-400 uppercase tracking-wider mb-2">Tonalité</label>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={() => transpose(-1)}
+                className="w-8 h-8 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 font-bold text-lg leading-none">
+                ‹
+              </button>
               {NOTE_NAMES.map((note, i) => (
                 <button key={i} onClick={() => setKeyNote(i)}
                   className={`w-10 h-10 rounded-lg text-sm font-semibold transition-colors
@@ -53,29 +71,35 @@ export default function Home() {
                   {note}
                 </button>
               ))}
+              <button onClick={() => transpose(+1)}
+                className="w-8 h-8 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 font-bold text-lg leading-none">
+                ›
+              </button>
             </div>
           </div>
 
+          {/* Degree */}
           <div>
             <label className="block text-xs text-gray-400 uppercase tracking-wider mb-2">Degré</label>
             <div className="flex flex-wrap gap-2">
               {DEGREE_LABELS.map((deg, i) => {
-                const type = DEGREE_CHORD_TYPE[i];
+                const type = DEGREE_CHORD_TYPE[mode][i];
                 return (
                   <button key={i} onClick={() => setDegreeIndex(i)}
                     className={`flex flex-col items-center px-3 py-2 rounded-lg text-sm transition-colors border
                       ${degreeIndex === i
-                        ? TYPE_BG[type] + ' border-opacity-100'
+                        ? TYPE_BG[type]
                         : 'bg-gray-700 text-gray-300 border-transparent hover:bg-gray-600'}`}>
                     <span className="font-bold">{deg}</span>
-                    <span className="text-xs opacity-70">{SYMBOLS[type]}</span>
+                    <span className="text-xs opacity-70">{ARPEGGIO_SYMBOL[type]}</span>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-6 items-end">
+          {/* Fret range */}
+          <div className="flex flex-wrap gap-4 items-end">
             <div>
               <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1">Frette min</label>
               <input type="number" min={0} max={fretMax - 1} value={fretMin}
@@ -91,7 +115,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Chord info + actions */}
+        {/* ── Chord info + actions ── */}
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className={`rounded-2xl px-5 py-4 border flex-1 min-w-0 ${TYPE_BG[chordType]}`}>
             <div className="flex items-baseline gap-3">
@@ -102,42 +126,41 @@ export default function Home() {
               {noteLabels.map((n, i) => <span key={i}>{n}</span>)}
             </div>
           </div>
-
-          <div className="flex flex-col gap-2 items-end">
-            <PlayButton keyNote={keyNote} degreeIndex={degreeIndex} arpeggioType={chordType} />
-            <button
-              onClick={() => setShowNotes(v => !v)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors
-                ${showNotes
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-            >
-              <span>{showNotes ? '♩' : '♩'}</span>
+          <div className="flex flex-col gap-2 items-end shrink-0">
+            <PlayButton keyNote={keyNote} degreeIndex={degreeIndex} arpeggioType={chordType} mode={mode} />
+            <button onClick={() => setShowNotes(v => !v)}
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors
+                ${showNotes ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>
               {showNotes ? 'Notes réelles' : 'Degrés'}
             </button>
           </div>
         </div>
 
-        {/* Main fretboard */}
-        <div className="bg-gray-800 rounded-2xl p-5">
-          <Fretboard
-            positions={positions}
-            arpeggioType={chordType}
-            fretMin={fretMin}
-            fretMax={fretMax}
-            showNotes={showNotes}
-          />
+        {/* ── Main fretboard + 5 positions ── */}
+        <div className="flex flex-col xl:flex-row gap-5">
+          <div className="flex-1 bg-gray-800 rounded-2xl p-5 min-w-0">
+            <Fretboard
+              positions={positions}
+              arpeggioType={chordType}
+              fretMin={fretMin}
+              fretMax={fretMax}
+              showNotes={showNotes}
+              variant="full"
+            />
+          </div>
+
+          <div className="xl:w-64 shrink-0 bg-gray-800 rounded-2xl p-4">
+            <PositionsPanel
+              keyNote={keyNote}
+              degreeIndex={degreeIndex}
+              arpeggioType={chordType}
+              mode={mode}
+              showNotes={showNotes}
+            />
+          </div>
         </div>
 
-        {/* 5 CAGED positions */}
-        <PositionsGrid
-          keyNote={keyNote}
-          degreeIndex={degreeIndex}
-          arpeggioType={chordType}
-          showNotes={showNotes}
-        />
-
-        {/* Favorites */}
+        {/* ── Favorites ── */}
         <FavoritesPanel
           keyNote={keyNote}
           degreeIndex={degreeIndex}

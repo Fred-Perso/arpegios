@@ -3,9 +3,7 @@ import { useEffect, useState } from 'react';
 import { User, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { Favorite, subscribeFavorites, addFavorite, removeFavorite } from '@/lib/favorites';
-import { NOTE_NAMES, DEGREE_LABELS, DEGREE_CHORD_TYPE } from '@/lib/music';
-
-const SYMBOLS: Record<string, string> = { Maj7: '△7', m7: 'm7', Dom7: '7', m7b5: 'ø7' };
+import { NOTE_NAMES, DEGREE_LABELS, DEGREE_CHORD_TYPE, ARPEGGIO_SYMBOL, SCALE_INTERVALS } from '@/lib/music';
 
 interface Props {
   keyNote: number;
@@ -72,9 +70,9 @@ export default function FavoritesPanel({ keyNote, degreeIndex, chordName, onSele
           <p className="text-xs text-gray-400 mb-3 uppercase tracking-wider">Favoris</p>
           <div className="flex flex-wrap gap-2">
             {favs.map(fav => {
-              const type = DEGREE_CHORD_TYPE[fav.degreeIndex];
-              const sym = SYMBOLS[type];
-              const root = NOTE_NAMES[(fav.keyNote + [0,2,4,5,7,9,11][fav.degreeIndex]) % 12];
+              const type = DEGREE_CHORD_TYPE['major'][fav.degreeIndex];
+              const sym  = ARPEGGIO_SYMBOL[type];
+              const root = NOTE_NAMES[(fav.keyNote + SCALE_INTERVALS['major'][fav.degreeIndex]) % 12];
               return (
                 <button
                   key={fav.id}
