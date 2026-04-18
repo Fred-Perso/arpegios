@@ -13,7 +13,7 @@ import {
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Chord = { name: string; notes: string[]; beats: number; type: string; rootIdx: number };
 
-// ─── Piano ───────────────────────────────────────────────────────────────────
+// ─── Piano (Salamander Grand) ────────────────────────────────────────────────
 const BASE_URL = 'https://tonejs.github.io/audio/salamander/';
 const SAMPLE_MAP: Record<string, string> = {
   A0:'A0.mp3', C1:'C1.mp3', 'D#1':'Ds1.mp3', 'F#1':'Fs1.mp3',
@@ -24,6 +24,15 @@ const SAMPLE_MAP: Record<string, string> = {
   A5:'A5.mp3', C6:'C6.mp3', 'D#6':'Ds6.mp3', 'F#6':'Fs6.mp3',
   A6:'A6.mp3', C7:'C7.mp3', 'D#7':'Ds7.mp3', 'F#7':'Fs7.mp3',
   A7:'A7.mp3', C8:'C8.mp3',
+};
+
+// ─── Contrebasse (FluidR3 GM acoustic bass) ───────────────────────────────────
+const BASS_URL = 'https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/acoustic_bass-mp3/';
+const BASS_MAP: Record<string, string> = {
+  'A#0':'As0.mp3', 'C#1':'Cs1.mp3', 'E1':'E1.mp3',  'G1':'G1.mp3',
+  'A#1':'As1.mp3', 'C#2':'Cs2.mp3', 'E2':'E2.mp3',  'G2':'G2.mp3',
+  'A#2':'As2.mp3', 'C#3':'Cs3.mp3', 'E3':'E3.mp3',  'G3':'G3.mp3',
+  'A#3':'As3.mp3',
 };
 
 // ─── Music helpers ───────────────────────────────────────────────────────────
@@ -241,13 +250,7 @@ function midiToNote(midi: number): string {
 
 // ─── Walking bass ─────────────────────────────────────────────────────────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function buildWalkingBass(Tone: any, events: EvItem[], totalBeats: number, bus: any): { bassInst: any; bassPart: any } {
-  const bassInst = new Tone.Synth({
-    oscillator: { type: 'triangle' },
-    envelope: { attack: 0.025, decay: 0.55, sustain: 0.04, release: 0.4 },
-  }).connect(bus);
-  bassInst.volume.value = -4;
-
+function buildWalkingBass(Tone: any, events: EvItem[], totalBeats: number, instrument: any): { bassPart: any } {
   const bassNotes: { time: string; note: string }[] = [];
   events.forEach((ev, i) => {
     const { rootIdx, type, beats } = ev.chord;
@@ -273,14 +276,14 @@ function buildWalkingBass(Tone: any, events: EvItem[], totalBeats: number, bus: 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const bassPart = new (Tone.Part as any)(
     (time: number, val: { note: string }) => {
-      bassInst.triggerAttackRelease(val.note, '4n', time + 0.010);
+      instrument?.triggerAttackRelease(val.note, '4n', time + 0.010, 0.88);
     },
     bassNotes,
   );
   bassPart.loop = true;
   bassPart.loopEnd = bt(totalBeats);
   bassPart.start(0);
-  return { bassInst, bassPart };
+  return { bassPart };
 }
 
 // ─── Jazz comp patterns (4 bars, then repeats) ───────────────────────────────
@@ -315,6 +318,8 @@ export default function AccompagnementPage() {
   const [bpm,          setBpm]          = useState(120);
   const [currentFlat,  setCurrentFlat]  = useState<number | null>(null);
   const [drumOn,       setDrumOn]       = useState(true);
+  const [pianoVol,     setPianoVol]     = useState(80);
+  const [bassVol,      setBassVol]      = useState(78);
   const [drumVol,      setDrumVol]      = useState(65);
   const [bars,         setBars]         = useState<Chord[][]>(INITIAL);
   const [editCell,     setEditCell]     = useState<{ barIdx: number; chordIdx: number } | null>(null);
@@ -345,13 +350,15 @@ export default function AccompagnementPage() {
   const [transposeOffset, setTransposeOffset] = useState(0);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const samplerRef = useRef<any>(null);
+  const samplerRef     = useRef<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const partRef    = useRef<any>(null);
+  const bassSamplerRef = useRef<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const drumKitRef = useRef<any>(null);
-  const loadedRef  = useRef(false);
-  const playIdRef  = useRef(0);
+  const partRef        = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const drumKitRef     = useRef<any>(null);
+  const loadedRef      = useRef(false);
+  const playIdRef      = useRef(0);
 
   // Load localStorage grids on mount (fallback when Firebase unavailable)
   useEffect(() => {
@@ -378,7 +385,12 @@ export default function AccompagnementPage() {
 
   // Cleanup audio on unmount
   useEffect(() => {
-    return () => { partRef.current?.dispose(); samplerRef.current?.dispose(); disposeDrums(); };
+    return () => {
+      partRef.current?.dispose();
+      samplerRef.current?.dispose();
+      bassSamplerRef.current?.dispose();
+      disposeDrums();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -389,37 +401,43 @@ export default function AccompagnementPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     k.seqs?.forEach((s: any) => { try { s.stop(0); s.dispose(); } catch {} });
     try { k.bassPart?.stop(0); k.bassPart?.dispose(); } catch {}
-    ['ride','hihat','kick','snare','bassInst','bus'].forEach(x => { try { k[x]?.dispose(); } catch {} });
+    ['ride','hihat','kick','snare','snareFilter','comp','bus'].forEach(x => { try { k[x]?.dispose(); } catch {} });
     drumKitRef.current = null;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function buildDrums(Tone: any, vol: number, enabled: boolean) {
     disposeDrums();
-    const bus = new Tone.Gain(enabled ? vol / 100 : 0).toDestination();
+    const bus  = new Tone.Gain(enabled ? vol / 100 : 0).toDestination();
+    const comp = new Tone.Compressor({ threshold: -18, ratio: 4, attack: 0.003, release: 0.12 }).connect(bus);
 
+    // Ride cymbal — long decay, rich harmonics (jazz cymbal feel)
     const ride = new Tone.MetalSynth({
-      frequency:380, harmonicity:5.1, modulationIndex:16,
-      envelope:{attack:0.001,decay:0.55,release:0.3}, resonance:3800, octaves:1.2,
-    }).connect(bus);
-    ride.volume.value = -5;
+      frequency:340, harmonicity:5.1, modulationIndex:32,
+      envelope:{attack:0.001,decay:1.1,release:0.8}, resonance:3600, octaves:1.5,
+    }).connect(comp);
+    ride.volume.value = -8;
 
+    // Hi-hat foot (2 & 4) — tight, closed
     const hihat = new Tone.MetalSynth({
-      frequency:1100, harmonicity:5.1, modulationIndex:12,
-      envelope:{attack:0.001,decay:0.07,release:0.04}, resonance:9000, octaves:1.5,
-    }).connect(bus);
-    hihat.volume.value = -11;
+      frequency:1000, harmonicity:5.1, modulationIndex:14,
+      envelope:{attack:0.001,decay:0.06,release:0.03}, resonance:8000, octaves:1.5,
+    }).connect(comp);
+    hihat.volume.value = -14;
 
+    // Kick — deeper, more body
     const kick = new Tone.MembraneSynth({
-      pitchDecay:0.04, octaves:5,
-      envelope:{attack:0.001,decay:0.22,sustain:0,release:0.08},
-    }).connect(bus);
-    kick.volume.value = -3;
+      pitchDecay:0.06, octaves:7,
+      envelope:{attack:0.001,decay:0.35,sustain:0,release:0.15},
+    }).connect(comp);
+    kick.volume.value = -1;
 
+    // Snare brushes — bandpass-filtered noise for that whispery brush sound
+    const snareFilter = new Tone.Filter(1400, 'bandpass', -24).connect(comp);
     const snare = new Tone.NoiseSynth({
-      noise:{type:'white'}, envelope:{attack:0.004,decay:0.28,sustain:0,release:0.12},
-    }).connect(bus);
-    snare.volume.value = -20; // soft brushwork
+      noise:{type:'white'}, envelope:{attack:0.004,decay:0.30,sustain:0,release:0.14},
+    }).connect(snareFilter);
+    snare.volume.value = -16;
 
     // lag (seconds) = "laid-back behind the beat" per instrument
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -437,7 +455,7 @@ export default function AccompagnementPage() {
       seq(KICK_PAT,  (t,v) => kick.triggerAttackRelease('C1','8n',t, v), 0.020),// kick: lazy pocket
       seq(SNARE_PAT, (t,v) => snare.triggerAttackRelease('16n',  t, v), 0.013), // snare: slightly late
     ];
-    drumKitRef.current = { ride, hihat, kick, snare, bus, seqs };
+    drumKitRef.current = { ride, hihat, kick, snare, snareFilter, comp, bus, seqs };
   }
 
   // ── Play / Stop ─────────────────────────────────────────────────────────────
@@ -458,13 +476,40 @@ export default function AccompagnementPage() {
 
       if (!loadedRef.current) {
         setStatus('loading');
-        const rev = new Tone.Reverb({ decay: 2.8, wet: 0.22 }).toDestination();
+
+        // Piano (Salamander) — required, fail if missing
+        const pianoRev = new Tone.Reverb({ decay: 2.8, wet: 0.20 }).toDestination();
         await new Promise<void>((res, rej) => {
           samplerRef.current = new Tone.Sampler({
             urls: SAMPLE_MAP, baseUrl: BASE_URL, release: 2.5,
-            onload: () => { loadedRef.current = true; res(); }, onerror: rej,
-          }).connect(rev);
+            onload: res, onerror: rej,
+          }).connect(pianoRev);
         });
+        samplerRef.current.volume.value = (pianoVol / 100) * 20 - 20;
+
+        // Contrebasse (FluidR3) — non-fatal, falls back to triangle synth
+        const bassRev = new Tone.Reverb({ decay: 1.5, wet: 0.08 }).toDestination();
+        await new Promise<void>(resolve => {
+          const s = new Tone.Sampler({
+            urls: BASS_MAP, baseUrl: BASS_URL, release: 2.0,
+            onload: () => { bassSamplerRef.current = s; resolve(); },
+            onerror: () => {
+              try { s.dispose(); } catch {}
+              // Fallback: triangle synth
+              const synth = new Tone.Synth({
+                oscillator: { type: 'triangle' },
+                envelope: { attack: 0.025, decay: 0.55, sustain: 0.04, release: 0.4 },
+              }).connect(bassRev);
+              synth.volume.value = -4;
+              bassSamplerRef.current = synth;
+              resolve();
+            },
+          }).connect(bassRev);
+        });
+        if (bassSamplerRef.current?.volume)
+          bassSamplerRef.current.volume.value = (bassVol / 100) * 20 - 20;
+
+        loadedRef.current = true;
       }
 
       // Chord part — jazz swing comping
@@ -510,10 +555,9 @@ export default function AccompagnementPage() {
       partRef.current.loopEnd = bt(totalBeats);
       partRef.current.start(0);
 
-      // Drum kit + walking bass
+      // Drum kit + walking bass (bass uses its own sampler/synth, not the drum bus)
       buildDrums(Tone, drumVol, drumOn);
-      const { bassInst, bassPart } = buildWalkingBass(Tone, events, totalBeats, drumKitRef.current.bus);
-      drumKitRef.current.bassInst = bassInst;
+      const { bassPart } = buildWalkingBass(Tone, events, totalBeats, bassSamplerRef.current);
       drumKitRef.current.bassPart = bassPart;
 
       // Count-in: 4 hi-hat clicks then start
@@ -537,6 +581,16 @@ export default function AccompagnementPage() {
   function changeBpm(v: number) {
     setBpm(v);
     import('tone').then(T => { T.Transport.bpm.value = v; });
+  }
+
+  function changePianoVol(v: number) {
+    setPianoVol(v);
+    if (samplerRef.current) samplerRef.current.volume.value = (v / 100) * 20 - 20;
+  }
+
+  function changeBassVol(v: number) {
+    setBassVol(v);
+    if (bassSamplerRef.current?.volume) bassSamplerRef.current.volume.value = (v / 100) * 20 - 20;
   }
 
   function changeDrumVol(v: number) {
@@ -719,24 +773,39 @@ export default function AccompagnementPage() {
             )}
           </div>
 
-          {/* Drum row */}
-          <div className="flex flex-wrap gap-3 items-center border-t border-gray-700 pt-3">
-            <button onClick={toggleDrum}
-              className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
-                drumOn ? 'bg-indigo-700 border-indigo-500 text-white' : 'bg-gray-700 border-gray-600 text-gray-400'
-              }`}>
-              🥁 {drumOn ? 'ON' : 'OFF'}
-            </button>
-            {drumOn && (
-              <div className="flex items-center gap-2 flex-1 min-w-[100px]">
-                <span className="text-xs text-gray-400 shrink-0">Vol.</span>
-                <input type="range" min={0} max={100} value={drumVol}
-                  onChange={e => changeDrumVol(+e.target.value)}
-                  className="flex-1 accent-indigo-500" />
-                <span className="font-mono text-xs text-gray-400 w-7 text-right">{drumVol}</span>
+          {/* Mixer — 3 pistes séparées */}
+          <div className="border-t border-gray-700 pt-3 space-y-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider w-full">Mixeur</p>
+              {[
+                { label: '🎹 Piano',  val: pianoVol, fn: changePianoVol, color: 'accent-amber-500' },
+                { label: '🎸 Basse',  val: bassVol,  fn: changeBassVol,  color: 'accent-blue-500'  },
+              ].map(({ label, val, fn, color }) => (
+                <div key={label} className="flex items-center gap-2 flex-1 min-w-[140px]">
+                  <span className="text-[10px] text-gray-400 shrink-0 w-16">{label}</span>
+                  <input type="range" min={0} max={100} value={val}
+                    onChange={e => fn(+e.target.value)}
+                    className={`flex-1 ${color}`} />
+                  <span className="font-mono text-[10px] text-gray-500 w-6 text-right">{val}</span>
+                </div>
+              ))}
+              <div className="flex items-center gap-2 flex-1 min-w-[140px]">
+                <button onClick={toggleDrum}
+                  className={`text-[10px] font-bold px-2 py-1 rounded border transition-all shrink-0 w-16 ${
+                    drumOn ? 'bg-indigo-700 border-indigo-500 text-white' : 'bg-gray-700 border-gray-600 text-gray-400'
+                  }`}>
+                  🥁 {drumOn ? 'ON' : 'OFF'}
+                </button>
+                {drumOn && (<>
+                  <input type="range" min={0} max={100} value={drumVol}
+                    onChange={e => changeDrumVol(+e.target.value)}
+                    className="flex-1 accent-indigo-500" />
+                  <span className="font-mono text-[10px] text-gray-500 w-6 text-right">{drumVol}</span>
+                </>)}
               </div>
-            )}
-            <div className="flex items-center gap-1 ml-auto">
+            </div>
+          </div>
+          <div className="flex items-center gap-1 mt-2">
               <span className="text-[10px] text-gray-500 mr-1">Transposer</span>
               {[-2,-1,1,2].map(s => (
                 <button key={s} onClick={() => transpose(s)} disabled={status !== 'idle'}
@@ -750,7 +819,6 @@ export default function AccompagnementPage() {
                   ↩ 0
                 </button>
               )}
-            </div>
           </div>
         </div>
 
