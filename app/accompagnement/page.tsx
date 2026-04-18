@@ -222,6 +222,8 @@ export default function AccompagnementPage() {
   const [showImport,   setShowImport]   = useState(false);
   const [importText,   setImportText]   = useState('');
   const [importPreview,setImportPreview]= useState<{ title: string; bars: Chord[][] } | null>(null);
+  const [saving,       setSaving]       = useState(false);
+  const [saveError,    setSaveError]    = useState<string | null>(null);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const samplerRef = useRef<any>(null);
@@ -231,6 +233,12 @@ export default function AccompagnementPage() {
   const drumKitRef = useRef<any>(null);
   const loadedRef  = useRef(false);
   const playIdRef  = useRef(0);
+
+  // Load localStorage grids on mount (fallback when Firebase unavailable)
+  useEffect(() => {
+    const local = JSON.parse(localStorage.getItem('arpegios-grids') ?? '[]');
+    if (local.length) setSavedGrids(local);
+  }, []);
 
   // Firebase anonymous auth
   useEffect(() => {
@@ -433,12 +441,27 @@ export default function AccompagnementPage() {
 
   // ── Archive ─────────────────────────────────────────────────────────────────
   async function handleSave() {
-    if (!saveName.trim() || !user) return;
-    await saveGridToDb(
-      user.uid, saveName.trim(),
-      bars.map(bar => bar.map(({ rootIdx, type, beats }) => ({ rootIdx, type, beats }))),
-    );
-    setSaveName(''); setShowSaveInput(false);
+    if (!saveName.trim()) return;
+    const name = saveName.trim();
+    const sc = bars.map(bar => bar.map(({ rootIdx, type, beats }) => ({ rootIdx, type, beats })));
+    setSaving(true); setSaveError(null);
+    try {
+      if (user) {
+        await saveGridToDb(user.uid, name, sc);
+      } else {
+        // localStorage fallback when auth unavailable
+        const stored = JSON.parse(localStorage.getItem('arpegios-grids') ?? '[]');
+        stored.push({ id: Date.now().toString(), uid: '', name, bars: sc, savedAt: new Date().toISOString() });
+        localStorage.setItem('arpegios-grids', JSON.stringify(stored));
+        setSavedGrids(stored);
+      }
+      setSaveName(''); setShowSaveInput(false);
+    } catch (e) {
+      console.error('Save failed:', e);
+      setSaveError('Erreur — vérifiez les règles Firestore');
+    } finally {
+      setSaving(false);
+    }
   }
 
   function loadGrid(grid: GridDoc) {
@@ -626,16 +649,17 @@ export default function AccompagnementPage() {
                 onKeyDown={e => e.key === 'Enter' && handleSave()}
                 placeholder="Nom de la grille…"
                 className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-500 outline-none focus:border-orange-400" />
-              <button onClick={handleSave}
-                className="px-4 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-sm font-bold text-white transition-colors">
-                OK
+              <button onClick={handleSave} disabled={saving}
+                className="px-4 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-sm font-bold text-white transition-colors disabled:opacity-60">
+                {saving ? '…' : 'OK'}
               </button>
-              <button onClick={() => setShowSaveInput(false)}
+              <button onClick={() => { setShowSaveInput(false); setSaveError(null); }}
                 className="px-3 py-1.5 rounded-lg bg-gray-700 text-sm text-gray-400 hover:text-white transition-colors">
                 ✕
               </button>
             </div>
           )}
+          {saveError && <p className="text-xs text-red-400">{saveError}</p>}
 
           {showImport && (
             <div className="space-y-2">
