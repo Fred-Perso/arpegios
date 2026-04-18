@@ -28,6 +28,10 @@ const SAMPLE_MAP: Record<string, string> = {
 
 // ─── Contrebasse (FluidR3 GM acoustic bass) ───────────────────────────────────
 const BASS_URL = 'https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/acoustic_bass-mp3/';
+
+// ─── Percussion (FluidR3 GM standard kit) ────────────────────────────────────
+// MIDI 51 = D#3 = Ride Cymbal 1 | MIDI 38 = D2 = Acoustic Snare
+const PERC_URL = 'https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/percussion-mp3/';
 const BASS_MAP: Record<string, string> = {
   'A#0':'As0.mp3', 'C#1':'Cs1.mp3', 'E1':'E1.mp3',  'G1':'G1.mp3',
   'A#1':'As1.mp3', 'C#2':'Cs2.mp3', 'E2':'E2.mp3',  'G2':'G2.mp3',
@@ -430,34 +434,36 @@ export default function AccompagnementPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     k.seqs?.forEach((s: any) => { try { s.stop(0); s.dispose(); } catch {} });
     try { k.bassPart?.stop(0); k.bassPart?.dispose(); } catch {}
-    ['ride','snare','snareFilter','warmth','comp','bus'].forEach(x => {
+    ['ride','snare','warmth','comp','bus'].forEach(x => {
       try { k[x]?.dispose(); } catch {}
     });
     drumKitRef.current = null;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function buildDrums(Tone: any, vol: number, enabled: boolean) {
+  async function buildDrums(Tone: any, vol: number, enabled: boolean) {
     disposeDrums();
 
-    // Vintage Blue Note chain: instruments → comp → warmth → bus → destination
-    const bus     = new Tone.Gain(enabled ? vol / 100 : 0).toDestination();
-    const warmth  = new Tone.Distortion({ distortion: 0.04, wet: 0.12 }).connect(bus);
-    const comp    = new Tone.Compressor({ threshold: -18, ratio: 4, attack: 0.003, release: 0.12 }).connect(warmth);
+    const bus    = new Tone.Gain(enabled ? vol / 100 : 0).toDestination();
+    const warmth = new Tone.Distortion({ distortion: 0.03, wet: 0.10 }).connect(bus);
+    const comp   = new Tone.Compressor({ threshold: -18, ratio: 4, attack: 0.003, release: 0.12 }).connect(warmth);
 
-    // Ride cymbal — spang-a-lang, long resonant decay
-    const ride = new Tone.MetalSynth({
-      frequency:330, harmonicity:5.1, modulationIndex:32,
-      envelope:{attack:0.001,decay:1.2,release:0.9}, resonance:3400, octaves:1.5,
+    // Ride cymbal — FluidR3 GM sample (MIDI 51 = D#3)
+    const ride = new Tone.Sampler({
+      urls: { 'D#3': 'Ds3.mp3' },
+      baseUrl: PERC_URL,
     }).connect(comp);
-    ride.volume.value = -7;
+    ride.volume.value = -4;
 
-    // Caisse claire — bandpass-filtered noise, ghost notes + accents sur 2&4
-    const snareFilter = new Tone.Filter(1400, 'bandpass', -24).connect(comp);
-    const snare = new Tone.NoiseSynth({
-      noise:{type:'white'}, envelope:{attack:0.003,decay:0.28,sustain:0,release:0.12},
-    }).connect(snareFilter);
-    snare.volume.value = -14;
+    // Caisse claire — FluidR3 GM sample (MIDI 38 = D2)
+    const snare = new Tone.Sampler({
+      urls: { 'D2': 'D2.mp3' },
+      baseUrl: PERC_URL,
+    }).connect(comp);
+    snare.volume.value = -2;
+
+    // Attendre le chargement des samples
+    await Tone.loaded();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const seq = (pat: (number|null)[], hit: (t:number,v:number)=>void, lag=0): any => {
@@ -469,10 +475,10 @@ export default function AccompagnementPage() {
     };
 
     const seqs = [
-      seq(RIDE_PAT,  (t,v) => ride.triggerAttackRelease('8t',  t, v), 0.018),
-      seq(SNARE_PAT, (t,v) => snare.triggerAttackRelease('16n', t, v), 0.013),
+      seq(RIDE_PAT,  (t,v) => ride.triggerAttack('D#3', t, v), 0.018),
+      seq(SNARE_PAT, (t,v) => snare.triggerAttack('D2',  t, v), 0.013),
     ];
-    drumKitRef.current = { ride, snare, snareFilter, warmth, comp, bus, seqs };
+    drumKitRef.current = { ride, snare, warmth, comp, bus, seqs };
   }
 
   // ── Play / Stop ─────────────────────────────────────────────────────────────
@@ -572,17 +578,17 @@ export default function AccompagnementPage() {
       partRef.current.loopEnd = bt(totalBeats);
       partRef.current.start(0);
 
-      // Drum kit + walking bass (bass uses its own sampler/synth, not the drum bus)
-      buildDrums(Tone, drumVol, drumOn);
+      // Drum kit + walking bass
+      await buildDrums(Tone, drumVol, drumOn);
       const { bassPart } = buildWalkingBass(Tone, events, totalBeats, bassSamplerRef.current);
       drumKitRef.current.bassPart = bassPart;
 
-      // Count-in: 4 hi-hat clicks then start
+      // Count-in: 4 ride clicks then start
       const beatDur = 60 / bpm;
       setStatus('counting');
       for (let i = 0; i < 4; i++) {
         const t = Tone.now() + 0.05 + i * beatDur;
-        drumKitRef.current.ride.triggerAttackRelease('8t', t, i === 0 ? 1.0 : 0.75);
+        drumKitRef.current.ride.triggerAttack('D#3', t, i === 0 ? 1.0 : 0.75);
         setTimeout(() => setCountBeat(4 - i), (i * beatDur) * 1000);
       }
       const startIn = 4 * beatDur + 0.05;
