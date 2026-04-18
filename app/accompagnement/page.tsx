@@ -58,29 +58,48 @@ const KICK_PAT  = [0.88, null, null,  null, null, null,  0.42, null, null,  null
 // Snare: accents 2&4 + soft ghost on upbeat 2 & 4 (shuffle "cha-KA")
 const SNARE_PAT = [null, null, null,  0.72, null, 0.22,  null, null, null,  0.70, null, 0.20];
 
-// ─── Initial chart: Fly Me to the Moon (Bart Howard) ─────────────────────────
-// Forme AA' — 16 mesures, boucle = 32 mesures à chaque chorus
-// A  (mes 1–8)  : exposition — cycle ↓5 diatonique en Do maj, cadence II–V en La min
-// A' (mes 9–16) : répétition — même harmonie, turnaround final Dm7/G7
+// ─── Initial chart: Fly Me to the Moon (Bart Howard) — 32 mesures ────────────
+// Forme Intro–A–B–C  (4 × 8 mesures)
 const INITIAL: Chord[][] = [
-  // ── A (mes 1–8) ──────────────────────────────────────────────────
-  [buildChord(9, 'm7')],                                          // 1  Am7   VIm7 en Do / Im7 en La min
-  [buildChord(2, 'm7')],                                          // 2  Dm7   IIm7 en Do   → début II–V–I
-  [buildChord(7, 'Dom7')],                                        // 3  G7    V7  en Do
-  [buildChord(0, 'Maj7')],                                        // 4  Cmaj7 I△7 en Do    → résolution
-  [buildChord(5, 'Maj7')],                                        // 5  Fmaj7 IV△7 en Do
-  [buildChord(11,'m7b5',2), buildChord(4,'Dom7',2)],              // 6  Bm7b5 | E7  → II–V en La min
-  [buildChord(9, 'm7')],                                          // 7  Am7   résolution La min
-  [buildChord(4, 'Dom7')],                                        // 8  E7    V7/Am — relance vers A
-  // ── A' (mes 9–16) ────────────────────────────────────────────────
-  [buildChord(9, 'm7')],                                          // 9  Am7
-  [buildChord(2, 'm7')],                                          // 10 Dm7
-  [buildChord(7, 'Dom7')],                                        // 11 G7
-  [buildChord(0, 'Maj7')],                                        // 12 Cmaj7
-  [buildChord(5, 'Maj7')],                                        // 13 Fmaj7
-  [buildChord(11,'m7b5',2), buildChord(4,'Dom7',2)],              // 14 Bm7b5 | E7
-  [buildChord(9, 'm7')],                                          // 15 Am7
-  [buildChord(2, 'm7',2),   buildChord(7,'Dom7',2)],              // 16 Dm7 | G7 — turnaround → retour mes 1
+  // ── Intro (mes 1–8) — exposition du thème ────────────────────────
+  [buildChord(9,  'm7')],                                       // 1  Am7
+  [buildChord(2,  'm7')],                                       // 2  Dm7
+  [buildChord(7,  'Dom7')],                                     // 3  G7
+  [buildChord(0,  'Maj7')],                                     // 4  Cmaj7
+  [buildChord(5,  'Maj7')],                                     // 5  Fmaj7
+  [buildChord(11, 'm7b5')],                                     // 6  Bm7b5
+  [buildChord(4,  'Dom7')],                                     // 7  E7
+  [buildChord(9,  'm7',2),  buildChord(9,  'Dom7',2)],          // 8  Am7 | A7
+
+  // ── A (mes 9–16) — développement en Do majeur ────────────────────
+  [buildChord(2,  'm7')],                                       // 9  Dm7
+  [buildChord(7,  'Dom7')],                                     // 10 G7
+  [buildChord(0,  'Maj7')],                                     // 11 Cmaj7
+  [buildChord(9,  'm7')],                                       // 12 Am7
+  [buildChord(2,  'm7')],                                       // 13 Dm7
+  [buildChord(7,  'Dom7')],                                     // 14 G7
+  [buildChord(0,  'Maj7')],                                     // 15 Cmaj7
+  [buildChord(0,  'Maj7')],                                     // 16 Cmaj7
+
+  // ── B (mes 17–24) — retour thème principal ───────────────────────
+  [buildChord(9,  'm7')],                                       // 17 Am7
+  [buildChord(2,  'm7')],                                       // 18 Dm7
+  [buildChord(7,  'Dom7')],                                     // 19 G7
+  [buildChord(0,  'Maj7')],                                     // 20 Cmaj7
+  [buildChord(5,  'Maj7')],                                     // 21 Fmaj7
+  [buildChord(11, 'm7b5')],                                     // 22 Bm7b5
+  [buildChord(4,  'Dom7')],                                     // 23 E7
+  [buildChord(9,  'm7',2),  buildChord(9,  'Dom7',2)],          // 24 Am7 | A7
+
+  // ── C (mes 25–32) — coda : II–V chaînés, retour turnaround ───────
+  [buildChord(2,  'm7')],                                       // 25 Dm7
+  [buildChord(7,  'Dom7')],                                     // 26 G7
+  [buildChord(4,  'm7')],                                       // 27 Em7
+  [buildChord(9,  'Dom7')],                                     // 28 A7
+  [buildChord(2,  'm7')],                                       // 29 Dm7
+  [buildChord(7,  'Dom7')],                                     // 30 G7
+  [buildChord(0,  'Maj7')],                                     // 31 Cmaj7
+  [buildChord(11, 'm7b5',2), buildChord(4, 'Dom7',2)],          // 32 Bm7b5 | E7 → retour Intro
 ];
 
 // ─── Colors ──────────────────────────────────────────────────────────────────
@@ -315,11 +334,13 @@ export default function AccompagnementPage() {
   const [saveTips,     setSaveTips]     = useState('');
   const [gridKey,      setGridKey]      = useState('La mineur / Do majeur');
   const [gridTips,     setGridTips]     = useState(
-    'Cycle ↓5 diatonique : Am7→Dm7→G7→Cmaj7→Fmaj7 (5 accords consécutifs en Do majeur). ' +
-    'Deux II–V–I imbriqués : Dm7–G7–Cmaj7 (Do maj) et Bm7b5–E7–Am7 (La min). ' +
-    'Mes. 8 : E7 = V7 de La min, relance la boucle. Mes. 16 : turnaround Dm7–G7 → retour mes. 1. ' +
-    'Impro : dorien sur Dm7 · mixolydien sur G7 · lydien sur Fmaj7 · locrien sur Bm7b5. ' +
-    'La pentatonique de La min fonctionne sur toute la grille.'
+    'INTRO & B (mes 1–8, 17–24) : cycle ↓5 diatonique Am7→Dm7→G7→Cmaj7→Fmaj7, ' +
+    'puis IIø–V–I en La min (Bm7b5–E7–Am7). Mes 8/24 : Am7|A7 = pivot vers Ré min (V7/IVm). ' +
+    'A (mes 9–16) : II–V–I répété en Do maj (Dm7–G7–Cmaj7), Am7 = retour relatif mineur, ' +
+    'double Cmaj7 final = plateau de stabilité. ' +
+    'C (mes 25–32) : II–V chaînés — Dm7–G7 (→Do), Em7–A7 (→Ré, dominante secondaire), ' +
+    'Dm7–G7–Cmaj7, turnaround Bm7b5–E7 → retour Intro. ' +
+    'Impro : penta La min sur toute la grille · dorien/Dm7 · mixolydien/G7 · lydien/Fmaj7 · locrien/Bm7b5.'
   );
   const [transposeOffset, setTransposeOffset] = useState(0);
 
