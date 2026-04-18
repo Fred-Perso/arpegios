@@ -546,51 +546,59 @@ export default function AccompagnementPage() {
         {/* Chord grid */}
         <div className="bg-gray-800 rounded-2xl p-4">
           <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">Grille</p>
-          <div className="space-y-2">
-            {[0, 1].map(half => (
-              <div key={half} className="grid grid-cols-8 gap-1">
-                {bars.slice(half * 8, half * 8 + 8).map((bar, offset) => {
-                  const barIdx = half * 8 + offset;
-                  const isActiveBar = currentBar === barIdx;
-                  const isEditBar = editCell?.barIdx === barIdx;
-                  return (
-                    <div key={barIdx}
-                      className={`rounded-lg border p-1.5 min-h-[54px] transition-all duration-100 ${
-                        isActiveBar  ? 'border-orange-400 bg-gray-700 shadow-lg shadow-orange-900/40 scale-105' :
-                        isEditBar    ? 'border-orange-300 bg-gray-700' :
-                                       'border-gray-700 bg-gray-900'
-                      }`}>
-                      <p className="text-[8px] text-gray-600 mb-1">{barIdx + 1}</p>
-                      <div className="space-y-0.5">
-                        {bar.map((chord, ci) => {
-                          const flatIdx = barFlatOffset[barIdx] + ci;
-                          const isActive = currentFlat === flatIdx;
-                          const isEditing = editCell?.barIdx === barIdx && editCell.chordIdx === ci;
-                          return (
-                            <button key={ci} onClick={() => openEdit(barIdx, ci)}
-                              className={`w-full text-left text-[10px] font-bold px-1 py-0.5 rounded border transition-all ${
-                                isEditing ? 'border-orange-400 bg-orange-900/40 text-orange-200' :
-                                isActive  ? COL_ACTIVE[chord.type] :
-                                canEdit   ? 'border-gray-700 hover:border-gray-500 ' + (COL_IDLE[chord.type] ?? 'text-gray-400') :
-                                            'bg-transparent border-transparent ' + (COL_IDLE[chord.type] ?? 'text-gray-400')
-                              } ${canEdit ? 'cursor-pointer' : 'cursor-default'}`}>
-                              {chord.name}
-                              {bar.length > 1 && <span className="text-[7px] opacity-40 ml-0.5">{chord.beats}t</span>}
-                            </button>
-                          );
-                        })}
-                      </div>
+          {(() => {
+            const PER_ROW = 8;
+            const rows: Chord[][][] = [];
+            for (let i = 0; i < bars.length; i += PER_ROW) rows.push(bars.slice(i, i + PER_ROW));
+            return (
+              <div className="space-y-2">
+                {rows.map((rowBars, rowIdx) => (
+                  <div key={rowIdx}>
+                    <div className="grid gap-1"
+                      style={{ gridTemplateColumns: `repeat(${rowBars.length}, minmax(0, 1fr))` }}>
+                      {rowBars.map((bar, offset) => {
+                        const barIdx = rowIdx * PER_ROW + offset;
+                        const isActiveBar = currentBar === barIdx;
+                        const isEditBar = editCell?.barIdx === barIdx;
+                        return (
+                          <div key={barIdx}
+                            className={`rounded-lg border p-1.5 min-h-[54px] transition-all duration-100 ${
+                              isActiveBar ? 'border-orange-400 bg-gray-700 shadow-lg shadow-orange-900/40 scale-105' :
+                              isEditBar   ? 'border-orange-300 bg-gray-700' :
+                                            'border-gray-700 bg-gray-900'
+                            }`}>
+                            <p className="text-[8px] text-gray-600 mb-1">{barIdx + 1}</p>
+                            <div className="space-y-0.5">
+                              {bar.map((chord, ci) => {
+                                const flatIdx = barFlatOffset[barIdx] + ci;
+                                const isActive = currentFlat === flatIdx;
+                                const isEditing = editCell?.barIdx === barIdx && editCell.chordIdx === ci;
+                                return (
+                                  <button key={ci} onClick={() => openEdit(barIdx, ci)}
+                                    className={`w-full text-left text-[10px] font-bold px-1 py-0.5 rounded border transition-all ${
+                                      isEditing ? 'border-orange-400 bg-orange-900/40 text-orange-200' :
+                                      isActive  ? COL_ACTIVE[chord.type] :
+                                      canEdit   ? 'border-gray-700 hover:border-gray-500 ' + (COL_IDLE[chord.type] ?? 'text-gray-400') :
+                                                  'bg-transparent border-transparent ' + (COL_IDLE[chord.type] ?? 'text-gray-400')
+                                    } ${canEdit ? 'cursor-pointer' : 'cursor-default'}`}>
+                                    {chord.name}
+                                    {bar.length > 1 && <span className="text-[7px] opacity-40 ml-0.5">{chord.beats}t</span>}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
+                    <p className="text-[9px] text-gray-600 text-center mt-0.5">
+                      mes. {rowIdx * PER_ROW + 1}–{rowIdx * PER_ROW + rowBars.length}
+                    </p>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <div className="grid grid-cols-2 gap-1 mt-2">
-            {['A¹ — mes. 1–8', 'A² — mes. 9–16'].map(l => (
-              <p key={l} className="text-[9px] text-gray-600 text-center">{l}</p>
-            ))}
-          </div>
+            );
+          })()}
         </div>
 
         {/* Archive */}
