@@ -40,12 +40,16 @@ function buildChord(rootIdx: number, type: string, beats = 4): Chord {
   return { name:`${NOTES[rootIdx]}${TYPE_SYM[type]}`, notes, beats, type, rootIdx };
 }
 
-// ─── Drum patterns — 12 triplet-8th steps per bar (authentic jazz swing) ─────
-// null = rest; number = velocity
-const RIDE_PAT  = [1.0, null, 0.5,  0.85, null, 0.5,  0.9, null, 0.5,  0.85, null, 0.5 ];
-const HIHAT_PAT = [null,null, null,  0.9, null,  null, null,null, null,  0.9, null,  null];
-const KICK_PAT  = [0.9, null, null,  null,null,  null, 0.45,null, null,  null,null,  null];
-const SNARE_PAT = [null,null, null,  0.7, null,  null, null,null, null,  0.7, null,  null];
+// ─── Drum patterns — 12 triplet-8th steps per bar ────────────────────────────
+// Layout: [beat1-down, beat1-mid, beat1-up,  beat2-down, …,  beat4-down, beat4-mid, beat4-up]
+// Ride: strong downbeats (long) / soft upbeats (short) → long-short shuffle
+const RIDE_PAT  = [0.95, null, 0.38,  0.82, null, 0.36,  0.92, null, 0.38,  0.80, null, 0.35];
+// Hi-hat foot on 2 & 4 (stays on-beat — anchors time)
+const HIHAT_PAT = [null, null, null,  0.92, null, null,  null, null, null,  0.90, null, null];
+// Kick: lazy beat 1, ghost on beat 3 (pocket feel)
+const KICK_PAT  = [0.88, null, null,  null, null, null,  0.42, null, null,  null, null, null];
+// Snare: accents 2&4 + soft ghost on upbeat 2 & 4 (shuffle "cha-KA")
+const SNARE_PAT = [null, null, null,  0.72, null, 0.22,  null, null, null,  0.70, null, 0.20];
 
 // ─── Initial chart: Fly Me to the Moon ───────────────────────────────────────
 const INITIAL: Chord[][] = [
@@ -160,20 +164,21 @@ export default function AccompagnementPage() {
     }).connect(bus);
     snare.volume.value = -15;
 
+    // lag (seconds) = "laid-back behind the beat" per instrument
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const seq = (pat: (number|null)[], hit: (t:number,v:number)=>void): any => {
+    const seq = (pat: (number|null)[], hit: (t:number,v:number)=>void, lag=0): any => {
       const s = new Tone.Sequence(
-        (time: number, vel: number | null) => { if (vel !== null) hit(time, vel); },
-        pat, '8t' // ← triplet 8th notes: true jazz swing without hacks
+        (time: number, vel: number | null) => { if (vel !== null) hit(time + lag, vel); },
+        pat, '8t' // triplet 8th notes → authentic swing feel
       );
       s.loop = true; s.start(0); return s;
     };
 
     const seqs = [
-      seq(RIDE_PAT,  (t,v) => ride.triggerAttackRelease('8t',  t, v)),
-      seq(HIHAT_PAT, (t,v) => hihat.triggerAttackRelease('16n', t, v)),
-      seq(KICK_PAT,  (t,v) => kick.triggerAttackRelease('C1', '8n', t, v)),
-      seq(SNARE_PAT, (t,v) => snare.triggerAttackRelease('16n', t, v)),
+      seq(RIDE_PAT,  (t,v) => ride.triggerAttackRelease('8t',   t, v), 0.018), // ride: laidback
+      seq(HIHAT_PAT, (t,v) => hihat.triggerAttackRelease('16n',  t, v), 0),     // hihat: on the beat
+      seq(KICK_PAT,  (t,v) => kick.triggerAttackRelease('C1','8n',t, v), 0.020),// kick: lazy pocket
+      seq(SNARE_PAT, (t,v) => snare.triggerAttackRelease('16n',  t, v), 0.013), // snare: slightly late
     ];
     drumKitRef.current = { ride, hihat, kick, snare, bus, seqs };
   }
@@ -277,6 +282,22 @@ export default function AccompagnementPage() {
     const newChord = buildChord(editRoot, editType, bars[editCell.barIdx][editCell.chordIdx].beats);
     setBars(prev => prev.map((bar, bi) =>
       bi !== editCell.barIdx ? bar : bar.map((c, ci) => ci !== editCell.chordIdx ? c : newChord)
+    ));
+    setEditCell(null);
+  }
+
+  // ── Bar structure ───────────────────────────────────────────────────────────
+  function splitBar(barIdx: number) {
+    setBars(prev => prev.map((bar, bi) => {
+      if (bi !== barIdx || bar.length !== 1) return bar;
+      return [{ ...bar[0], beats: 2 }, { ...bar[0], beats: 2 }];
+    }));
+    setEditCell({ barIdx, chordIdx: 0 });
+  }
+
+  function mergeBar(barIdx: number) {
+    setBars(prev => prev.map((bar, bi) =>
+      bi === barIdx && bar.length > 1 ? [{ ...bar[0], beats: 4 }] : bar
     ));
     setEditCell(null);
   }
@@ -500,14 +521,31 @@ export default function AccompagnementPage() {
       {editCell && (
         <div className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-700 p-4 z-50 shadow-2xl">
           <div className="max-w-3xl mx-auto space-y-3">
-            <div className="flex items-center justify-between">
+            {/* Header row */}
+            <div className="flex items-center gap-3 flex-wrap">
               <p className="text-sm font-semibold text-white">
-                Éditer mesure {editCell.barIdx + 1}
-                <span className={`ml-2 text-xs px-2 py-0.5 rounded ${COL_ACTIVE[editType] ?? ''}`}>
+                Mesure {editCell.barIdx + 1}
+                <span className={`ml-2 text-xs px-2 py-0.5 rounded border ${COL_ACTIVE[editType] ?? ''}`}>
                   {NOTES[editRoot]}{TYPE_SYM[editType]}
                 </span>
               </p>
-              <button onClick={() => setEditCell(null)} className="text-gray-400 hover:text-white text-lg leading-none">✕</button>
+
+              {/* Split / Merge */}
+              {bars[editCell.barIdx].length === 1 ? (
+                <button onClick={() => splitBar(editCell.barIdx)}
+                  title="Diviser la mesure en 2 accords (2+2 temps)"
+                  className="px-3 py-1 rounded-lg text-xs font-bold bg-gray-700 hover:bg-blue-700 text-gray-300 hover:text-white border border-gray-600 transition-all">
+                  ÷2 Diviser
+                </button>
+              ) : (
+                <button onClick={() => mergeBar(editCell.barIdx)}
+                  title="Fusionner en 1 accord (4 temps)"
+                  className="px-3 py-1 rounded-lg text-xs font-bold bg-gray-700 hover:bg-red-800 text-gray-300 hover:text-white border border-gray-600 transition-all">
+                  ⊕ Fusionner
+                </button>
+              )}
+
+              <button onClick={() => setEditCell(null)} className="ml-auto text-gray-400 hover:text-white text-lg leading-none">✕</button>
             </div>
 
             {/* Root selector */}
@@ -524,7 +562,7 @@ export default function AccompagnementPage() {
               ))}
             </div>
 
-            {/* Type selector */}
+            {/* Type selector + Apply */}
             <div className="flex gap-1.5 flex-wrap items-center">
               {TYPES.map(t => (
                 <button key={t} onClick={() => setEditType(t)}
