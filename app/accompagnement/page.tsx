@@ -66,6 +66,8 @@ const HIHAT_PAT = [null, null, null,  0.94, null, null,  null, null, null,  0.92
 const KICK_PAT  = [0.38, null, null,  0.22, null, null,  0.32, null, null,  0.20, null, null];
 // Snare: ghost notes + accents on 2&4 (Blakey ghost-note texture)
 const SNARE_PAT = [null, 0.12, null,  0.85, null, 0.14,  null, 0.12, null,  0.83, null, 0.15];
+// Charleston (hi-hat stick): beats 1–4 + upbeats of 2&4 → driving swing feel
+const HHSTICK_PAT = [0.42, null, null,  0.52, null, 0.26,  0.40, null, null,  0.50, null, 0.24];
 
 // ─── Initial chart: Fly Me to the Moon (Bart Howard) — 32 mesures ────────────
 // Forme Intro–A–B–C  (4 × 8 mesures)
@@ -434,7 +436,7 @@ export default function AccompagnementPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     k.seqs?.forEach((s: any) => { try { s.stop(0); s.dispose(); } catch {} });
     try { k.bassPart?.stop(0); k.bassPart?.dispose(); } catch {}
-    ['ride','hihat','kick','snare','snareFilter','warmth','comp','bus'].forEach(x => {
+    ['ride','hihat','hhStick','kick','snare','snareFilter','warmth','comp','bus'].forEach(x => {
       try { k[x]?.dispose(); } catch {}
     });
     drumKitRef.current = null;
@@ -463,6 +465,13 @@ export default function AccompagnementPage() {
     }).connect(comp);
     hihat.volume.value = -13;
 
+    // Charleston (hi-hat stick) — closed hi-hat, brighter & shorter than foot
+    const hhStick = new Tone.MetalSynth({
+      frequency:1200, harmonicity:5.5, modulationIndex:18,
+      envelope:{attack:0.001,decay:0.04,release:0.02}, resonance:9000, octaves:1.2,
+    }).connect(comp);
+    hhStick.volume.value = -18;
+
     // Kick — deep, feathered (all 4 beats, very soft)
     const kick = new Tone.MembraneSynth({
       pitchDecay:0.07, octaves:7,
@@ -488,12 +497,13 @@ export default function AccompagnementPage() {
     };
 
     const seqs = [
-      seq(RIDE_PAT,  (t,v) => ride.triggerAttackRelease('8t',   t, v), 0.018),
-      seq(HIHAT_PAT, (t,v) => hihat.triggerAttackRelease('16n', t, v), 0),
-      seq(KICK_PAT,  (t,v) => kick.triggerAttackRelease('C1','8n',t, v), 0.020),
-      seq(SNARE_PAT, (t,v) => snare.triggerAttackRelease('16n', t, v), 0.013),
+      seq(RIDE_PAT,    (t,v) => ride.triggerAttackRelease('8t',   t, v), 0.018),
+      seq(HIHAT_PAT,   (t,v) => hihat.triggerAttackRelease('16n', t, v), 0),
+      seq(HHSTICK_PAT, (t,v) => hhStick.triggerAttackRelease('16n', t, v), 0.008),
+      seq(KICK_PAT,    (t,v) => kick.triggerAttackRelease('C1','8n',t, v), 0.020),
+      seq(SNARE_PAT,   (t,v) => snare.triggerAttackRelease('16n', t, v), 0.013),
     ];
-    drumKitRef.current = { ride, hihat, kick, snare, snareFilter, warmth, comp, bus, seqs };
+    drumKitRef.current = { ride, hihat, hhStick, kick, snare, snareFilter, warmth, comp, bus, seqs };
   }
 
   // ── Play / Stop ─────────────────────────────────────────────────────────────
