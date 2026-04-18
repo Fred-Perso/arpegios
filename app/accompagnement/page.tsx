@@ -57,12 +57,18 @@ function buildChord(rootIdx: number, type: string, beats = 4): Chord {
   return { name:`${NOTES[rootIdx]}${TYPE_SYM[type]}`, notes, beats, type, rootIdx };
 }
 
-// ─── Drum patterns — 12 triplet-8th steps per bar ────────────────────────────
-// Layout: [beat1-down, beat1-mid, beat1-up,  beat2-down, …,  beat4-down, beat4-mid, beat4-up]
-// Art Blakey spang-a-lang: strong on 1&3, soft triplet "a" upbeats
-const RIDE_PAT  = [0.90, null, 0.55,  0.85, null, 0.52,  0.88, null, 0.55,  0.82, null, 0.50];
-// Snare: accents sur 2&4 + ghost notes (texture jazz)
-const SNARE_PAT = [null, 0.12, null,  0.82, null, 0.14,  null, 0.12, null,  0.80, null, 0.13];
+// ─── Drum pattern — 8 croches swinguées (swing 0.55) ─────────────────────────
+// R=ride fort  r=ride léger  H=hihat  k=kick  s=snare léger  S=snare fort  .=silence
+const DRUM_SWING = 0.55;
+const DRUM_PAT = {
+  ride:  ['R', '.', 'r', 'R', '.', 'r', 'R', '.'],
+  hihat: ['.', '.', 'H', '.', '.', '.', 'H', '.'],
+  kick:  ['k', '.', 'k', '.', 'k', '.', 'k', '.'],
+  snare: ['.', '.', '.', 's', '.', 'S', '.', '.'],
+} as const;
+const DRUM_VEL: Record<string, number> = {
+  R: 0.90, r: 0.42, H: 0.88, k: 0.72, s: 0.44, S: 0.86,
+};
 
 // ─── Initial chart: Fly Me to the Moon (Bart Howard) — 32 mesures ────────────
 // Forme Intro–A–B–C  (4 × 8 mesures)
@@ -431,7 +437,7 @@ export default function AccompagnementPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     k.seqs?.forEach((s: any) => { try { s.stop(0); s.dispose(); } catch {} });
     try { k.bassPart?.stop(0); k.bassPart?.dispose(); } catch {}
-    ['ride','snareBody','snareWire','snareWireFilter','warmth','comp','bus'].forEach(x => {
+    ['ride','hihat','kick','snareBody','snareWire','snareWireFilter','warmth','comp','bus'].forEach(x => {
       try { k[x]?.dispose(); } catch {}
     });
     drumKitRef.current = null;
@@ -441,18 +447,36 @@ export default function AccompagnementPage() {
   function buildDrums(Tone: any, vol: number, enabled: boolean) {
     disposeDrums();
 
+    // Appliquer le swing sur les croches
+    Tone.Transport.swing = DRUM_SWING;
+    Tone.Transport.swingSubdivision = '8n';
+
     const bus    = new Tone.Gain(enabled ? vol / 100 : 0).toDestination();
     const warmth = new Tone.Distortion({ distortion: 0.03, wet: 0.10 }).connect(bus);
     const comp   = new Tone.Compressor({ threshold: -18, ratio: 4, attack: 0.003, release: 0.12 }).connect(warmth);
 
-    // Ride — deux partiels MetalSynth pour un timbre plus riche
+    // Ride
     const ride = new Tone.MetalSynth({
-      frequency: 280, harmonicity: 5.1, modulationIndex: 28,
-      envelope: { attack: 0.001, decay: 1.6, release: 1.2 }, resonance: 3200, octaves: 1.5,
+      frequency: 420, harmonicity: 5.1, modulationIndex: 40,
+      envelope: { attack: 0.001, decay: 0.9, release: 2.0 }, resonance: 4200, octaves: 1.8,
     }).connect(comp);
-    ride.volume.value = -6;
+    ride.volume.value = -4;
 
-    // Caisse claire — corps (MembraneSynth) + fils (NoiseSynth highpass)
+    // Hi-hat (temps 2 & 4)
+    const hihat = new Tone.MetalSynth({
+      frequency: 1100, harmonicity: 5.1, modulationIndex: 16,
+      envelope: { attack: 0.001, decay: 0.05, release: 0.02 }, resonance: 9000, octaves: 1.2,
+    }).connect(comp);
+    hihat.volume.value = -14;
+
+    // Kick
+    const kick = new Tone.MembraneSynth({
+      pitchDecay: 0.06, octaves: 7,
+      envelope: { attack: 0.001, decay: 0.35, sustain: 0, release: 0.14 },
+    }).connect(comp);
+    kick.volume.value = -2;
+
+    // Caisse claire — corps + fils
     const snareBody = new Tone.MembraneSynth({
       pitchDecay: 0.008, octaves: 3,
       envelope: { attack: 0.001, decay: 0.10, sustain: 0, release: 0.05 },
@@ -466,26 +490,28 @@ export default function AccompagnementPage() {
     }).connect(snareWireFilter);
     snareWire.volume.value = -12;
 
-    const rideHit = (t: number, v: number) => ride.triggerAttackRelease('8t', t, v);
+    const rideHit  = (t: number, v: number) => ride.triggerAttackRelease('8t', t, v);
     const snareHit = (t: number, v: number) => {
-      if (v > 0.35) snareBody.triggerAttackRelease('C3', '32n', t, v * 0.8);
+      if (v > 0.50) snareBody.triggerAttackRelease('C3', '32n', t, v * 0.8);
       snareWire.triggerAttackRelease('32n', t, v);
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const seq = (pat: (number|null)[], hit: (t:number,v:number)=>void, lag=0): any => {
+    const mkSeq = (pat: readonly string[], hit: (t:number, sym:string)=>void): any => {
       const s = new Tone.Sequence(
-        (time: number, vel: number | null) => { if (vel !== null) hit(time + lag, vel); },
-        pat, '8t'
+        (time: number, sym: string) => { if (sym !== '.') hit(time, sym); },
+        [...pat], '8n'
       );
       s.loop = true; s.start(0); return s;
     };
 
     const seqs = [
-      seq(RIDE_PAT,  rideHit,  0.018),
-      seq(SNARE_PAT, snareHit, 0.013),
+      mkSeq(DRUM_PAT.ride,  (t,sym) => rideHit(t, DRUM_VEL[sym])),
+      mkSeq(DRUM_PAT.hihat, (t,sym) => hihat.triggerAttackRelease('16n', t, DRUM_VEL[sym])),
+      mkSeq(DRUM_PAT.kick,  (t,sym) => kick.triggerAttackRelease('C1', '8n', t, DRUM_VEL[sym])),
+      mkSeq(DRUM_PAT.snare, (t,sym) => snareHit(t, DRUM_VEL[sym])),
     ];
-    drumKitRef.current = { ride, snareBody, snareWire, snareWireFilter, rideHit, warmth, comp, bus, seqs };
+    drumKitRef.current = { ride, hihat, kick, snareBody, snareWire, snareWireFilter, rideHit, warmth, comp, bus, seqs };
   }
 
   // ── Play / Stop ─────────────────────────────────────────────────────────────
