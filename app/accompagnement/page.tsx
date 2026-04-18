@@ -29,9 +29,6 @@ const SAMPLE_MAP: Record<string, string> = {
 // ─── Contrebasse (FluidR3 GM acoustic bass) ───────────────────────────────────
 const BASS_URL = 'https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/acoustic_bass-mp3/';
 
-// ─── Percussion (FluidR3 GM standard kit) ────────────────────────────────────
-// MIDI 51 = D#3 = Ride Cymbal 1 | MIDI 38 = D2 = Acoustic Snare
-const PERC_URL = 'https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/percussion-mp3/';
 const BASS_MAP: Record<string, string> = {
   'A#0':'As0.mp3', 'C#1':'Cs1.mp3', 'E1':'E1.mp3',  'G1':'G1.mp3',
   'A#1':'As1.mp3', 'C#2':'Cs2.mp3', 'E2':'E2.mp3',  'G2':'G2.mp3',
@@ -434,54 +431,46 @@ export default function AccompagnementPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     k.seqs?.forEach((s: any) => { try { s.stop(0); s.dispose(); } catch {} });
     try { k.bassPart?.stop(0); k.bassPart?.dispose(); } catch {}
-    ['ride','snare','warmth','comp','bus'].forEach(x => {
+    ['ride','snareBody','snareWire','snareWireFilter','warmth','comp','bus'].forEach(x => {
       try { k[x]?.dispose(); } catch {}
     });
     drumKitRef.current = null;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async function buildDrums(Tone: any, vol: number, enabled: boolean) {
+  function buildDrums(Tone: any, vol: number, enabled: boolean) {
     disposeDrums();
 
     const bus    = new Tone.Gain(enabled ? vol / 100 : 0).toDestination();
     const warmth = new Tone.Distortion({ distortion: 0.03, wet: 0.10 }).connect(bus);
     const comp   = new Tone.Compressor({ threshold: -18, ratio: 4, attack: 0.003, release: 0.12 }).connect(warmth);
 
-    // Charge un sampler avec fallback synth si le sample est introuvable
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    function loadPerc(note: string, file: string, fallbackFn: () => { inst: any; hit: (t:number,v:number)=>void }) {
-      return Promise.race<{ inst: any; hit: (t:number,v:number)=>void }>([
-        new Promise(resolve => {
-          const s = new Tone.Sampler({
-            urls: { [note]: file }, baseUrl: PERC_URL,
-            onload:  () => resolve({ inst: s, hit: (t,v) => s.triggerAttack(note, t, v) }),
-            onerror: () => { try { s.dispose(); } catch {} resolve(fallbackFn()); },
-          }).connect(comp);
-        }),
-        // timeout 5 s → fallback synth si CDN ne répond pas
-        new Promise(resolve => setTimeout(() => resolve(fallbackFn()), 5000)),
-      ]);
-    }
+    // Ride — deux partiels MetalSynth pour un timbre plus riche
+    const ride = new Tone.MetalSynth({
+      frequency: 280, harmonicity: 5.1, modulationIndex: 28,
+      envelope: { attack: 0.001, decay: 1.6, release: 1.2 }, resonance: 3200, octaves: 1.5,
+    }).connect(comp);
+    ride.volume.value = -6;
 
-    const [rideObj, snareObj] = await Promise.all([
-      loadPerc('D#3', 'Ds3.mp3', () => {
-        const r = new Tone.MetalSynth({
-          frequency:330, harmonicity:5.1, modulationIndex:32,
-          envelope:{attack:0.001,decay:1.2,release:0.9}, resonance:3400, octaves:1.5,
-        }).connect(comp);
-        r.volume.value = -7;
-        return { inst: r, hit: (t:number,v:number) => r.triggerAttackRelease('8t', t, v) };
-      }),
-      loadPerc('D2', 'D2.mp3', () => {
-        const sf = new Tone.Filter(1400, 'bandpass', -24).connect(comp);
-        const s = new Tone.NoiseSynth({
-          noise:{type:'white'}, envelope:{attack:0.003,decay:0.28,sustain:0,release:0.12},
-        }).connect(sf);
-        s.volume.value = -14;
-        return { inst: s, hit: (t:number,v:number) => s.triggerAttackRelease('16n', t, v) };
-      }),
-    ]);
+    // Caisse claire — corps (MembraneSynth) + fils (NoiseSynth highpass)
+    const snareBody = new Tone.MembraneSynth({
+      pitchDecay: 0.008, octaves: 3,
+      envelope: { attack: 0.001, decay: 0.10, sustain: 0, release: 0.05 },
+    }).connect(comp);
+    snareBody.volume.value = -5;
+
+    const snareWireFilter = new Tone.Filter({ frequency: 2800, type: 'highpass' }).connect(comp);
+    const snareWire = new Tone.NoiseSynth({
+      noise: { type: 'white' },
+      envelope: { attack: 0.001, decay: 0.20, sustain: 0, release: 0.06 },
+    }).connect(snareWireFilter);
+    snareWire.volume.value = -12;
+
+    const rideHit = (t: number, v: number) => ride.triggerAttackRelease('8t', t, v);
+    const snareHit = (t: number, v: number) => {
+      if (v > 0.35) snareBody.triggerAttackRelease('C3', '32n', t, v * 0.8);
+      snareWire.triggerAttackRelease('32n', t, v);
+    };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const seq = (pat: (number|null)[], hit: (t:number,v:number)=>void, lag=0): any => {
@@ -493,10 +482,10 @@ export default function AccompagnementPage() {
     };
 
     const seqs = [
-      seq(RIDE_PAT,  rideObj.hit,  0.018),
-      seq(SNARE_PAT, snareObj.hit, 0.013),
+      seq(RIDE_PAT,  rideHit,  0.018),
+      seq(SNARE_PAT, snareHit, 0.013),
     ];
-    drumKitRef.current = { ride: rideObj.inst, snare: snareObj.inst, rideHit: rideObj.hit, warmth, comp, bus, seqs };
+    drumKitRef.current = { ride, snareBody, snareWire, snareWireFilter, rideHit, warmth, comp, bus, seqs };
   }
 
   // ── Play / Stop ─────────────────────────────────────────────────────────────
@@ -597,7 +586,7 @@ export default function AccompagnementPage() {
       partRef.current.start(0);
 
       // Drum kit + walking bass
-      await buildDrums(Tone, drumVol, drumOn);
+      buildDrums(Tone, drumVol, drumOn);
       const { bassPart } = buildWalkingBass(Tone, events, totalBeats, bassSamplerRef.current);
       drumKitRef.current.bassPart = bassPart;
 
