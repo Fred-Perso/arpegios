@@ -60,14 +60,8 @@ function buildChord(rootIdx: number, type: string, beats = 4): Chord {
 // Layout: [beat1-down, beat1-mid, beat1-up,  beat2-down, …,  beat4-down, beat4-mid, beat4-up]
 // Art Blakey spang-a-lang: strong on 1&3, soft triplet "a" upbeats
 const RIDE_PAT  = [0.90, null, 0.55,  0.85, null, 0.52,  0.88, null, 0.55,  0.82, null, 0.50];
-// Hi-hat foot on 2 & 4 (anchors time)
-const HIHAT_PAT = [null, null, null,  0.94, null, null,  null, null, null,  0.92, null, null];
-// Feathered kick on all 4 beats (very soft — hard-bop pocket feel)
-const KICK_PAT  = [0.38, null, null,  0.22, null, null,  0.32, null, null,  0.20, null, null];
-// Snare: ghost notes + accents on 2&4 (Blakey ghost-note texture)
-const SNARE_PAT = [null, 0.12, null,  0.85, null, 0.14,  null, 0.12, null,  0.83, null, 0.15];
-// Charleston (hi-hat stick): beats 1–4 + upbeats of 2&4 → driving swing feel
-const HHSTICK_PAT = [0.42, null, null,  0.52, null, 0.26,  0.40, null, null,  0.50, null, 0.24];
+// Snare: accents sur 2&4 + ghost notes (texture jazz)
+const SNARE_PAT = [null, 0.12, null,  0.82, null, 0.14,  null, 0.12, null,  0.80, null, 0.13];
 
 // ─── Initial chart: Fly Me to the Moon (Bart Howard) — 32 mesures ────────────
 // Forme Intro–A–B–C  (4 × 8 mesures)
@@ -436,7 +430,7 @@ export default function AccompagnementPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     k.seqs?.forEach((s: any) => { try { s.stop(0); s.dispose(); } catch {} });
     try { k.bassPart?.stop(0); k.bassPart?.dispose(); } catch {}
-    ['ride','hihat','hhStick','kick','snare','snareFilter','warmth','comp','bus'].forEach(x => {
+    ['ride','snare','snareFilter','warmth','comp','bus'].forEach(x => {
       try { k[x]?.dispose(); } catch {}
     });
     drumKitRef.current = null;
@@ -451,42 +445,20 @@ export default function AccompagnementPage() {
     const warmth  = new Tone.Distortion({ distortion: 0.04, wet: 0.12 }).connect(bus);
     const comp    = new Tone.Compressor({ threshold: -18, ratio: 4, attack: 0.003, release: 0.12 }).connect(warmth);
 
-    // Ride cymbal — Art Blakey spang-a-lang: long resonant decay
+    // Ride cymbal — spang-a-lang, long resonant decay
     const ride = new Tone.MetalSynth({
       frequency:330, harmonicity:5.1, modulationIndex:32,
       envelope:{attack:0.001,decay:1.2,release:0.9}, resonance:3400, octaves:1.5,
     }).connect(comp);
     ride.volume.value = -7;
 
-    // Hi-hat foot (2 & 4) — tight, authoritative
-    const hihat = new Tone.MetalSynth({
-      frequency:1000, harmonicity:5.1, modulationIndex:14,
-      envelope:{attack:0.001,decay:0.06,release:0.03}, resonance:8000, octaves:1.5,
-    }).connect(comp);
-    hihat.volume.value = -13;
-
-    // Charleston (hi-hat stick) — closed hi-hat, brighter & shorter than foot
-    const hhStick = new Tone.MetalSynth({
-      frequency:1200, harmonicity:5.5, modulationIndex:18,
-      envelope:{attack:0.001,decay:0.04,release:0.02}, resonance:9000, octaves:1.2,
-    }).connect(comp);
-    hhStick.volume.value = -18;
-
-    // Kick — deep, feathered (all 4 beats, very soft)
-    const kick = new Tone.MembraneSynth({
-      pitchDecay:0.07, octaves:7,
-      envelope:{attack:0.001,decay:0.38,sustain:0,release:0.15},
-    }).connect(comp);
-    kick.volume.value = -3;
-
-    // Snare — bandpass-filtered noise: ghost notes + accents
+    // Caisse claire — bandpass-filtered noise, ghost notes + accents sur 2&4
     const snareFilter = new Tone.Filter(1400, 'bandpass', -24).connect(comp);
     const snare = new Tone.NoiseSynth({
       noise:{type:'white'}, envelope:{attack:0.003,decay:0.28,sustain:0,release:0.12},
     }).connect(snareFilter);
-    snare.volume.value = -15;
+    snare.volume.value = -14;
 
-    // lag (seconds) = "laid-back behind the beat" per instrument
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const seq = (pat: (number|null)[], hit: (t:number,v:number)=>void, lag=0): any => {
       const s = new Tone.Sequence(
@@ -497,13 +469,10 @@ export default function AccompagnementPage() {
     };
 
     const seqs = [
-      seq(RIDE_PAT,    (t,v) => ride.triggerAttackRelease('8t',   t, v), 0.018),
-      seq(HIHAT_PAT,   (t,v) => hihat.triggerAttackRelease('16n', t, v), 0),
-      seq(HHSTICK_PAT, (t,v) => hhStick.triggerAttackRelease('16n', t, v), 0.008),
-      seq(KICK_PAT,    (t,v) => kick.triggerAttackRelease('C1','8n',t, v), 0.020),
-      seq(SNARE_PAT,   (t,v) => snare.triggerAttackRelease('16n', t, v), 0.013),
+      seq(RIDE_PAT,  (t,v) => ride.triggerAttackRelease('8t',  t, v), 0.018),
+      seq(SNARE_PAT, (t,v) => snare.triggerAttackRelease('16n', t, v), 0.013),
     ];
-    drumKitRef.current = { ride, hihat, hhStick, kick, snare, snareFilter, warmth, comp, bus, seqs };
+    drumKitRef.current = { ride, snare, snareFilter, warmth, comp, bus, seqs };
   }
 
   // ── Play / Stop ─────────────────────────────────────────────────────────────
@@ -613,7 +582,7 @@ export default function AccompagnementPage() {
       setStatus('counting');
       for (let i = 0; i < 4; i++) {
         const t = Tone.now() + 0.05 + i * beatDur;
-        drumKitRef.current.hihat.triggerAttackRelease('16n', t, i === 0 ? 1.0 : 0.75);
+        drumKitRef.current.ride.triggerAttackRelease('8t', t, i === 0 ? 1.0 : 0.75);
         setTimeout(() => setCountBeat(4 - i), (i * beatDur) * 1000);
       }
       const startIn = 4 * beatDur + 0.05;
