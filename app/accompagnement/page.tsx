@@ -114,7 +114,7 @@ export default function AccompagnementPage() {
       const playId = ++playIdRef.current;
 
       partRef.current?.dispose();
-      partRef.current = new Tone.Part(
+      partRef.current = new Tone.Part<{ chord: Chord; flatIdx: number }>(
         (time: number, val: { chord: Chord; flatIdx: number }) => {
           const dur = val.chord.beats === 4 ? '1n' : '2n';
           // Slight upward roll for natural piano feel
