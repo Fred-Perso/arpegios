@@ -4,12 +4,15 @@ import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 
 const TUTO_LINKS = [
-  { href: '/tuto/variete',       label: 'Je viens de la variété' },
-  { href: '/tuto/intervalles',   label: 'Intervalles'            },
-  { href: '/tuto',               label: 'Harmonie majeure'       },
-  { href: '/tuto/deux-cinq-un',  label: 'II–V–I'                 },
-  { href: '/tuto/standard',      label: 'Autumn Leaves'          },
-  { href: '/tuto/histoire',      label: 'Histoire du jazz'       },
+  { href: '/tuto/variete',        label: 'Je viens de la variété' },
+  { href: '/tuto/intervalles',    label: 'Intervalles'            },
+  { href: '/tuto/gammes',         label: 'Les gammes'             },
+  { href: '/tuto/modes',          label: 'Les modes'              },
+  { href: '/tuto',                label: 'Harmonie majeure'       },
+  { href: '/tuto/pentatonique',   label: 'Pentatonique jazz'      },
+  { href: '/tuto/deux-cinq-un',   label: 'II–V–I'                 },
+  { href: '/tuto/standard',       label: 'Autumn Leaves'          },
+  { href: '/tuto/histoire',       label: 'Histoire du jazz'       },
 ];
 
 export default function Nav() {

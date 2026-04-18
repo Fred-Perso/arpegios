@@ -26,10 +26,10 @@ function IntervalSchema() {
       })}
       {/* Interval labels between scale notes */}
       {[
-        {from:0,to:2,label:'M2',color:'#60a5fa'},{from:2,to:4,label:'M2',color:'#60a5fa'},
-        {from:4,to:5,label:'m2',color:'#f87171'},{from:5,to:7,label:'M2',color:'#60a5fa'},
-        {from:7,to:9,label:'M2',color:'#60a5fa'},{from:9,to:11,label:'M2',color:'#60a5fa'},
-        {from:11,to:12,label:'m2',color:'#f87171'},
+        {from:0,to:2,label:'1T',color:'#60a5fa'},{from:2,to:4,label:'1T',color:'#60a5fa'},
+        {from:4,to:5,label:'½T',color:'#f87171'},{from:5,to:7,label:'1T',color:'#60a5fa'},
+        {from:7,to:9,label:'1T',color:'#60a5fa'},{from:9,to:11,label:'1T',color:'#60a5fa'},
+        {from:11,to:12,label:'½T',color:'#f87171'},
       ].map((iv,i)=>{
         const x1 = iv.from*cellW+cellW/2+r+2; const x2 = iv.to*cellW+cellW/2-r-2;
         const mx = (x1+x2)/2;
@@ -137,8 +137,8 @@ export default function IntervallesPage() {
         <Box>
           <h2 className="text-xl font-bold">2. Structure de la gamme majeure</h2>
           <p className="text-gray-300 text-sm leading-relaxed mb-4">
-            La gamme majeure est construite avec un enchaînement précis de tons (M2 = 2 demi-tons) et demi-tons (m2 = 1 demi-ton).
-            La formule est <strong className="text-white">T T dT T T T dT</strong> (Ton Ton demi-Ton Ton Ton Ton demi-Ton).
+            La gamme majeure est construite avec un enchaînement précis de <strong className="text-white">tons</strong> (1T = 2 cases) et <strong className="text-white">demi-tons</strong> (½T = 1 case).
+            La formule est <strong className="text-white">1T 1T ½T 1T 1T 1T ½T</strong>.
           </p>
           <IntervalSchema />
           <p className="text-gray-400 text-xs text-center mt-2">
