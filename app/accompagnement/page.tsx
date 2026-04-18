@@ -434,7 +434,7 @@ export default function AccompagnementPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     k.seqs?.forEach((s: any) => { try { s.stop(0); s.dispose(); } catch {} });
     try { k.bassPart?.stop(0); k.bassPart?.dispose(); } catch {}
-    ['ride','hihat','kick','snare','snareFilter','tomH','tomF','warmth','comp','bus'].forEach(x => {
+    ['ride','hihat','kick','snare','snareFilter','warmth','comp','bus'].forEach(x => {
       try { k[x]?.dispose(); } catch {}
     });
     drumKitRef.current = null;
@@ -477,47 +477,23 @@ export default function AccompagnementPage() {
     }).connect(snareFilter);
     snare.volume.value = -15;
 
-    // High tom (triplet fills)
-    const tomH = new Tone.MembraneSynth({
-      pitchDecay:0.04, octaves:5,
-      envelope:{attack:0.001,decay:0.25,sustain:0,release:0.10},
-    }).connect(comp);
-    tomH.volume.value = -5;
-
-    // Floor tom (fill resolutions)
-    const tomF = new Tone.MembraneSynth({
-      pitchDecay:0.07, octaves:5,
-      envelope:{attack:0.001,decay:0.42,sustain:0,release:0.14},
-    }).connect(comp);
-    tomF.volume.value = -3;
-
-    // 96-step tom fill pattern (8 bars × 12 steps) — fill on last 8 steps of bar 8
-    const tomHFill = Array.from({length:96}, (_,i) =>
-      ({88:0.62,90:0.68,92:0.65,94:0.72} as Record<number,number>)[i] ?? null
-    ) as (number|null)[];
-    const tomFFill = Array.from({length:96}, (_,i) =>
-      ({91:0.70,93:0.76,95:0.82} as Record<number,number>)[i] ?? null
-    ) as (number|null)[];
-
     // lag (seconds) = "laid-back behind the beat" per instrument
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const seq = (pat: (number|null)[], hit: (t:number,v:number)=>void, lag=0, subdiv='8t'): any => {
+    const seq = (pat: (number|null)[], hit: (t:number,v:number)=>void, lag=0): any => {
       const s = new Tone.Sequence(
         (time: number, vel: number | null) => { if (vel !== null) hit(time + lag, vel); },
-        pat, subdiv
+        pat, '8t'
       );
       s.loop = true; s.start(0); return s;
     };
 
     const seqs = [
-      seq(RIDE_PAT,  (t,v) => ride.triggerAttackRelease('8t',    t, v), 0.018),
-      seq(HIHAT_PAT, (t,v) => hihat.triggerAttackRelease('16n',  t, v), 0),
+      seq(RIDE_PAT,  (t,v) => ride.triggerAttackRelease('8t',   t, v), 0.018),
+      seq(HIHAT_PAT, (t,v) => hihat.triggerAttackRelease('16n', t, v), 0),
       seq(KICK_PAT,  (t,v) => kick.triggerAttackRelease('C1','8n',t, v), 0.020),
-      seq(SNARE_PAT, (t,v) => snare.triggerAttackRelease('16n',  t, v), 0.013),
-      seq(tomHFill,  (t,v) => tomH.triggerAttackRelease('G2','8n',t, v), 0.010),
-      seq(tomFFill,  (t,v) => tomF.triggerAttackRelease('C2','8n',t, v), 0.010),
+      seq(SNARE_PAT, (t,v) => snare.triggerAttackRelease('16n', t, v), 0.013),
     ];
-    drumKitRef.current = { ride, hihat, kick, snare, snareFilter, tomH, tomF, warmth, comp, bus, seqs };
+    drumKitRef.current = { ride, hihat, kick, snare, snareFilter, warmth, comp, bus, seqs };
   }
 
   // ── Play / Stop ─────────────────────────────────────────────────────────────
