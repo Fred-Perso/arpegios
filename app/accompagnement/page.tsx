@@ -396,21 +396,46 @@ export default function AccompagnementPage() {
         });
       }
 
-      // Chord part
+      // Chord part — jazz swing comping
       const { events, totalBeats } = buildEvents(bars);
       const playId = ++playIdRef.current;
       partRef.current?.dispose();
-      type PV = { time: string; chord: Chord; flatIdx: number };
-      partRef.current = new Tone.Part<PV>(
+
+      // Build comping events: shell voicing on beat 2, upper on beat 3, anticipation on beat 4
+      // Beat 1 stays free for the walking bass
+      type PV = { time: string; notes: string[] | null; dur: string; vel: number; flatIdx: number | null };
+      const compEvents: PV[] = [];
+      events.forEach(ev => {
+        const n = ev.chord.notes; // [root, 3rd/m3, 5th, 7th]
+        // Marker for chord highlight (always on beat 1 of chord)
+        compEvents.push({ time: bt(ev.beatStart), notes: null, dur: '', vel: 0, flatIdx: ev.flatIdx });
+
+        if (ev.chord.beats >= 4) {
+          // Beat 2: shell — 3rd + 7th (rootless voicing)
+          compEvents.push({ time: bt(ev.beatStart + 1), notes: [n[1], n[3]],       dur: '4n', vel: 0.70, flatIdx: null });
+          // Beat 3: upper — root (oct) + 5th
+          compEvents.push({ time: bt(ev.beatStart + 2), notes: [n[0], n[2]],       dur: '4n', vel: 0.60, flatIdx: null });
+          // Beat 4: closing — 3rd + 5th + 7th (anticipation)
+          compEvents.push({ time: bt(ev.beatStart + 3), notes: [n[1], n[2], n[3]], dur: '8n', vel: 0.50, flatIdx: null });
+        } else {
+          // 2-beat chord: single hit on beat 1 with all notes
+          compEvents.push({ time: bt(ev.beatStart), notes: n, dur: '2n', vel: 0.72, flatIdx: null });
+        }
+      });
+
+      partRef.current = new (Tone.Part as any)(
         (time: number, val: PV) => {
-          const dur = val.chord.beats === 4 ? '1n' : '2n';
-          val.chord.notes.forEach((n, i) =>
-            samplerRef.current.triggerAttackRelease(n, dur, time + i * 0.022)
-          );
-          const ms = Math.max(0, (time - Tone.now()) * 1000);
-          setTimeout(() => { if (playIdRef.current === playId) setCurrentFlat(val.flatIdx); }, ms);
+          if (val.flatIdx !== null) {
+            const ms = Math.max(0, (time - Tone.now()) * 1000);
+            setTimeout(() => { if (playIdRef.current === playId) setCurrentFlat(val.flatIdx!); }, ms);
+          }
+          if (val.notes) {
+            val.notes.forEach((note, i) =>
+              samplerRef.current.triggerAttackRelease(note, val.dur, time + i * 0.015, val.vel)
+            );
+          }
         },
-        events.map(ev => ({ time: bt(ev.beatStart), chord: ev.chord, flatIdx: ev.flatIdx }))
+        compEvents,
       );
       partRef.current.loop = true;
       partRef.current.loopEnd = bt(totalBeats);
