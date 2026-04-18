@@ -15,7 +15,7 @@ export interface GridDoc {
   id: string;
   uid: string;
   name: string;
-  bars: StoredChord[][];
+  bars: { chords: StoredChord[] }[];
   savedAt: Timestamp;
 }
 
@@ -29,11 +29,11 @@ export function subscribeGrids(uid: string, cb: (grids: GridDoc[]) => void) {
 export async function saveGrid(
   uid: string,
   name: string,
-  bars: StoredChord[][],
+  bars: { chords: StoredChord[] }[],
 ): Promise<void> {
   await addDoc(collection(db, 'grids'), {
     uid, name,
-    bars: bars.map(bar => bar.map(({ rootIdx, type, beats }) => ({ rootIdx, type, beats }))),
+    bars: bars.map(bar => ({ chords: bar.chords.map(({ rootIdx, type, beats }) => ({ rootIdx, type, beats })) })),
     savedAt: Timestamp.now(),
   });
 }

@@ -443,15 +443,15 @@ export default function AccompagnementPage() {
   async function handleSave() {
     if (!saveName.trim()) return;
     const name = saveName.trim();
-    const sc = bars.map(bar => bar.map(({ rootIdx, type, beats }) => ({ rootIdx, type, beats })));
     setSaving(true); setSaveError(null);
     try {
+      const wrapped = bars.map(bar => ({ chords: bar.map(({ rootIdx, type, beats }) => ({ rootIdx, type, beats })) }));
       if (user) {
-        await saveGridToDb(user.uid, name, sc);
+        await saveGridToDb(user.uid, name, wrapped);
       } else {
         // localStorage fallback when auth unavailable
         const stored = JSON.parse(localStorage.getItem('arpegios-grids') ?? '[]');
-        stored.push({ id: Date.now().toString(), uid: '', name, bars: sc, savedAt: new Date().toISOString() });
+        stored.push({ id: Date.now().toString(), uid: '', name, bars: wrapped, savedAt: new Date().toISOString() });
         localStorage.setItem('arpegios-grids', JSON.stringify(stored));
         setSavedGrids(stored);
       }
@@ -467,7 +467,7 @@ export default function AccompagnementPage() {
 
   function loadGrid(grid: GridDoc) {
     if (status !== 'idle') return;
-    setBars(grid.bars.map(bar => bar.map(sc => buildChord(sc.rootIdx, sc.type, sc.beats))));
+    setBars(grid.bars.map(bar => bar.chords.map(sc => buildChord(sc.rootIdx, sc.type, sc.beats))));
     setEditCell(null);
   }
 
