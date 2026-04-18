@@ -114,8 +114,9 @@ export default function AccompagnementPage() {
       const playId = ++playIdRef.current;
 
       partRef.current?.dispose();
-      partRef.current = new Tone.Part<{ chord: Chord; flatIdx: number }>(
-        (time: number, val: { chord: Chord; flatIdx: number }) => {
+      type PartVal = { time: string; chord: Chord; flatIdx: number };
+      partRef.current = new Tone.Part<PartVal>(
+        (time: number, val: PartVal) => {
           const dur = val.chord.beats === 4 ? '1n' : '2n';
           // Slight upward roll for natural piano feel
           val.chord.notes.forEach((note, i) => {
@@ -127,7 +128,7 @@ export default function AccompagnementPage() {
             if (playIdRef.current === playId) setCurrentFlat(val.flatIdx);
           }, delayMs);
         },
-        events.map(ev => [bt(ev.beatStart), { chord: ev.chord, flatIdx: ev.flatIdx }] as [string, { chord: Chord; flatIdx: number }])
+        events.map(ev => ({ time: bt(ev.beatStart), chord: ev.chord, flatIdx: ev.flatIdx }))
       );
 
       partRef.current.loop    = true;
