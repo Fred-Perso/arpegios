@@ -19,13 +19,18 @@ export default function FavoritesPanel({ keyNote, degreeIndex, chordName, onSele
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async u => {
-      if (!u) {
-        const { user: anon } = await signInAnonymously(auth);
-        setUser(anon);
-      } else {
-        setUser(u);
+      try {
+        if (!u) {
+          const { user: anon } = await signInAnonymously(auth);
+          setUser(anon);
+        } else {
+          setUser(u);
+        }
+      } catch (e) {
+        console.warn('Firebase auth failed:', e);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
     return unsub;
   }, []);
