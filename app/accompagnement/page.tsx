@@ -456,9 +456,10 @@ export default function AccompagnementPage() {
         setSavedGrids(stored);
       }
       setSaveName(''); setShowSaveInput(false);
-    } catch (e) {
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
       console.error('Save failed:', e);
-      setSaveError('Erreur — vérifiez les règles Firestore');
+      setSaveError(msg);
     } finally {
       setSaving(false);
     }
