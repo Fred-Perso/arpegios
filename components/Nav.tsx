@@ -41,7 +41,7 @@ export default function Nav() {
             </button>
 
             {open && (
-              <div className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl py-1.5 z-50 w-52"
+              <div className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl py-1.5 z-50 w-52 max-w-[calc(100vw-2rem)]"
                    onClick={() => setOpen(false)}>
                 <p className="text-xs text-gray-500 uppercase tracking-wider px-3 py-1.5">Parcours progressif</p>
                 {TUTO_LINKS.map(({ href, label }, i) => (

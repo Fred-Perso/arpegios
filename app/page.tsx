@@ -35,90 +35,101 @@ export default function Home() {
   const noteLabels = DEGREE_NOTE_NAMES[chordType];
 
   return (
-    <main className="min-h-screen bg-gray-900 text-white px-3 py-5">
-      <div className="max-w-5xl mx-auto space-y-4">
+    <main className="min-h-screen bg-gray-900 text-white px-3 py-4">
+      <div className="max-w-5xl mx-auto space-y-3">
 
         {/* ── Controls ── */}
-        <div className="bg-gray-800 rounded-2xl p-4 space-y-4">
-          <div className="flex gap-2">
+        <div className="bg-gray-800 rounded-2xl p-3 sm:p-4 space-y-3">
+
+          {/* Harmony mode — full width on mobile */}
+          <div className="grid grid-cols-2 gap-2">
             {(['major', 'melodicMinor'] as HarmonyMode[]).map(m => (
               <button key={m} onClick={() => { setMode(m); setDegreeIndex(0); }}
-                className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors
-                  ${mode === m ? 'bg-orange-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>
+                className={`py-2 rounded-lg text-xs sm:text-sm font-semibold transition-colors
+                  ${mode === m ? 'bg-orange-500 text-white' : 'bg-gray-700 text-gray-300 active:bg-gray-600'}`}>
                 {m === 'major' ? 'Gamme majeure' : 'Min. mélodique'}
               </button>
             ))}
           </div>
 
+          {/* Key selector — compact on mobile */}
           <div>
-            <label className="block text-xs text-gray-400 uppercase tracking-wider mb-2">Tonalité</label>
-            <div className="flex flex-wrap items-center gap-2">
+            <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1.5">Tonalité</label>
+            <div className="flex items-center gap-1 flex-wrap">
               <button onClick={() => setKeyNote(k => (k - 1 + 12) % 12)}
-                className="w-8 h-8 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 font-bold text-xl leading-none">‹</button>
-              {NOTE_NAMES.map((note, i) => (
-                <button key={i} onClick={() => setKeyNote(i)}
-                  className={`w-10 h-10 rounded-lg text-sm font-semibold transition-colors
-                    ${keyNote === i ? 'bg-orange-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>
-                  {note}
-                </button>
-              ))}
+                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gray-700 active:bg-gray-600 text-gray-300 font-bold text-lg leading-none flex-shrink-0">
+                ‹
+              </button>
+              <div className="flex gap-1 flex-wrap flex-1">
+                {NOTE_NAMES.map((note, i) => (
+                  <button key={i} onClick={() => setKeyNote(i)}
+                    className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg text-xs sm:text-sm font-semibold transition-colors
+                      ${keyNote === i ? 'bg-orange-500 text-white' : 'bg-gray-700 text-gray-300 active:bg-gray-600'}`}>
+                    {note}
+                  </button>
+                ))}
+              </div>
               <button onClick={() => setKeyNote(k => (k + 1) % 12)}
-                className="w-8 h-8 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 font-bold text-xl leading-none">›</button>
+                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gray-700 active:bg-gray-600 text-gray-300 font-bold text-lg leading-none flex-shrink-0">
+                ›
+              </button>
             </div>
           </div>
 
+          {/* Degree selector */}
           <div>
-            <label className="block text-xs text-gray-400 uppercase tracking-wider mb-2">Degré</label>
-            <div className="flex flex-wrap gap-2">
+            <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1.5">Degré</label>
+            <div className="grid grid-cols-7 gap-1">
               {DEGREE_LABELS.map((deg, i) => {
                 const type = DEGREE_CHORD_TYPE[mode][i];
                 return (
                   <button key={i} onClick={() => setDegreeIndex(i)}
-                    className={`flex flex-col items-center px-3 py-2 rounded-lg text-sm transition-colors border
-                      ${degreeIndex === i ? TYPE_BG[type] : 'bg-gray-700 text-gray-300 border-transparent hover:bg-gray-600'}`}>
-                    <span className="font-bold">{deg}</span>
-                    <span className="text-xs opacity-70">{ARPEGGIO_SYMBOL[type]}</span>
+                    className={`flex flex-col items-center py-1.5 px-0.5 rounded-lg text-xs transition-colors border
+                      ${degreeIndex === i ? TYPE_BG[type] : 'bg-gray-700 text-gray-300 border-transparent active:bg-gray-600'}`}>
+                    <span className="font-bold text-xs sm:text-sm">{deg}</span>
+                    <span className="text-[9px] sm:text-xs opacity-70 leading-tight">{ARPEGGIO_SYMBOL[type]}</span>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-4 items-end">
+          {/* Fret range + actions */}
+          <div className="flex flex-wrap gap-2 items-end">
             <div>
-              <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1">Frette min</label>
+              <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1">Fr. min</label>
               <input type="number" min={0} max={fretMax - 1} value={fretMin}
                 onChange={e => setFretMin(Math.max(0, +e.target.value))}
-                className="w-20 bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white" />
+                className="w-16 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-sm text-white" />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1">Frette max</label>
+              <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1">Fr. max</label>
               <input type="number" min={fretMin + 1} max={24} value={fretMax}
                 onChange={e => setFretMax(Math.min(24, +e.target.value))}
-                className="w-20 bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white" />
+                className="w-16 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-sm text-white" />
             </div>
             <PlayButton keyNote={keyNote} degreeIndex={degreeIndex} arpeggioType={chordType} mode={mode} />
             <button onClick={() => setShowNotes(v => !v)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors
-                ${showNotes ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>
-              {showNotes ? 'Notes réelles' : 'Degrés'}
+              className={`px-3 py-2 rounded-xl text-xs sm:text-sm font-medium transition-colors
+                ${showNotes ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-300 active:bg-gray-600'}`}>
+              {showNotes ? 'Notes' : 'Degrés'}
             </button>
           </div>
         </div>
 
         {/* ── Chord info ── */}
-        <div className={`rounded-2xl px-5 py-3 border flex items-center justify-between gap-4 ${TYPE_BG[chordType]}`}>
-          <div className="flex items-baseline gap-3">
-            <span className="text-3xl font-bold">{chordName}</span>
-            <span className="opacity-70">{chordType}</span>
+        <div className={`rounded-2xl px-4 py-3 border flex items-center justify-between gap-2 flex-wrap ${TYPE_BG[chordType]}`}>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl sm:text-3xl font-bold">{chordName}</span>
+            <span className="text-sm opacity-70">{chordType}</span>
           </div>
-          <div className="flex gap-3 text-sm opacity-80 flex-wrap">
+          <div className="flex gap-2 text-xs sm:text-sm opacity-80 flex-wrap">
             {noteLabels.map((n, i) => <span key={i}>{n}</span>)}
           </div>
         </div>
 
         {/* ── Main fretboard ── */}
-        <div className="bg-gray-800 rounded-2xl p-4">
+        <div className="bg-gray-800 rounded-2xl p-3 sm:p-4">
           <Fretboard
             positions={positions}
             arpeggioType={chordType}
@@ -130,7 +141,7 @@ export default function Home() {
         </div>
 
         {/* ── 5 positions 2-2-1 ── */}
-        <div className="bg-gray-800 rounded-2xl p-4">
+        <div className="bg-gray-800 rounded-2xl p-3 sm:p-4">
           <PositionsPanel
             keyNote={keyNote}
             degreeIndex={degreeIndex}

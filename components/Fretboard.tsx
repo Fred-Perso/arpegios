@@ -41,7 +41,7 @@ export default function Fretboard({
   const labels = DEGREE_NOTE_NAMES[arpeggioType];
 
   return (
-    <div className={isPanel ? '' : 'w-full overflow-x-auto'}>
+    <div className="w-full">
       {positionLabel && (
         <p className="text-center text-xs text-gray-400 mb-1 font-medium">{positionLabel}</p>
       )}
@@ -49,7 +49,6 @@ export default function Fretboard({
       <svg
         viewBox={`0 0 ${W} ${H}`}
         className={isPanel ? 'w-full' : 'w-full max-w-3xl mx-auto'}
-        style={isPanel ? {} : { minWidth: 400 }}
       >
         {/* Nut */}
         {fretMin === 0 && (

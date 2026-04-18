@@ -73,14 +73,13 @@ export default function PositionsPanel({ keyNote, degreeIndex, arpeggioType, mod
         ))}
       </div>
 
-      {/* Row 3: position 4 */}
+      {/* Row 3: position 5 — full width on mobile, half on larger */}
       {windows[4] && (
-        <div className="flex justify-center">
-          <div className="w-1/2">
-            <MiniBoard {...miniProps}
-              wMin={windows[4][0]} wMax={windows[4][1]}
-              label={`Pos. 5  ${windows[4][0]}–${windows[4][1]}`} />
-          </div>
+        <div className="grid grid-cols-2 gap-2">
+          <MiniBoard {...miniProps}
+            wMin={windows[4][0]} wMax={windows[4][1]}
+            label={`Pos. 5  ${windows[4][0]}–${windows[4][1]}`} />
+          <div /> {/* spacer */}
         </div>
       )}
     </div>
