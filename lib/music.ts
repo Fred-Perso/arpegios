@@ -77,3 +77,25 @@ export function getChordName(keyNote: number, degreeIndex: number): string {
 
 export const FRET_MARKERS = [3, 5, 7, 9, 12];
 export const DOUBLE_FRET_MARKERS = [12];
+
+// Open string frequencies Hz: E2 A2 D3 G3 B3 E4
+export const STRING_OPEN_FREQ = [82.41, 110.00, 146.83, 196.00, 246.94, 329.63];
+
+export function fretToFreq(string: number, fret: number): number {
+  return STRING_OPEN_FREQ[string] * Math.pow(2, fret / 12);
+}
+
+export function getNoteAt(string: number, fret: number): string {
+  return NOTE_NAMES[(STRING_OPEN[string] + fret) % 12];
+}
+
+// Returns 5 [fretMin, fretMax] windows based on root positions across the neck
+export function getPositionWindows(rootSemitone: number): [number, number][] {
+  const roots = new Set<number>();
+  for (const open of STRING_OPEN) {
+    const fret = (rootSemitone - (open % 12) + 12) % 12;
+    roots.add(fret);
+  }
+  const sorted = [...roots].sort((a, b) => a - b);
+  return sorted.map(f => [Math.max(0, f - 1), f + 4] as [number, number]);
+}
