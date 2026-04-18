@@ -448,22 +448,40 @@ export default function AccompagnementPage() {
     const warmth = new Tone.Distortion({ distortion: 0.03, wet: 0.10 }).connect(bus);
     const comp   = new Tone.Compressor({ threshold: -18, ratio: 4, attack: 0.003, release: 0.12 }).connect(warmth);
 
-    // Ride cymbal — FluidR3 GM sample (MIDI 51 = D#3)
-    const ride = new Tone.Sampler({
-      urls: { 'D#3': 'Ds3.mp3' },
-      baseUrl: PERC_URL,
-    }).connect(comp);
-    ride.volume.value = -4;
+    // Charge un sampler avec fallback synth si le sample est introuvable
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    function loadPerc(note: string, file: string, fallbackFn: () => { inst: any; hit: (t:number,v:number)=>void }) {
+      return Promise.race<{ inst: any; hit: (t:number,v:number)=>void }>([
+        new Promise(resolve => {
+          const s = new Tone.Sampler({
+            urls: { [note]: file }, baseUrl: PERC_URL,
+            onload:  () => resolve({ inst: s, hit: (t,v) => s.triggerAttack(note, t, v) }),
+            onerror: () => { try { s.dispose(); } catch {} resolve(fallbackFn()); },
+          }).connect(comp);
+        }),
+        // timeout 5 s → fallback synth si CDN ne répond pas
+        new Promise(resolve => setTimeout(() => resolve(fallbackFn()), 5000)),
+      ]);
+    }
 
-    // Caisse claire — FluidR3 GM sample (MIDI 38 = D2)
-    const snare = new Tone.Sampler({
-      urls: { 'D2': 'D2.mp3' },
-      baseUrl: PERC_URL,
-    }).connect(comp);
-    snare.volume.value = -2;
-
-    // Attendre le chargement des samples
-    await Tone.loaded();
+    const [rideObj, snareObj] = await Promise.all([
+      loadPerc('D#3', 'Ds3.mp3', () => {
+        const r = new Tone.MetalSynth({
+          frequency:330, harmonicity:5.1, modulationIndex:32,
+          envelope:{attack:0.001,decay:1.2,release:0.9}, resonance:3400, octaves:1.5,
+        }).connect(comp);
+        r.volume.value = -7;
+        return { inst: r, hit: (t:number,v:number) => r.triggerAttackRelease('8t', t, v) };
+      }),
+      loadPerc('D2', 'D2.mp3', () => {
+        const sf = new Tone.Filter(1400, 'bandpass', -24).connect(comp);
+        const s = new Tone.NoiseSynth({
+          noise:{type:'white'}, envelope:{attack:0.003,decay:0.28,sustain:0,release:0.12},
+        }).connect(sf);
+        s.volume.value = -14;
+        return { inst: s, hit: (t:number,v:number) => s.triggerAttackRelease('16n', t, v) };
+      }),
+    ]);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const seq = (pat: (number|null)[], hit: (t:number,v:number)=>void, lag=0): any => {
@@ -475,10 +493,10 @@ export default function AccompagnementPage() {
     };
 
     const seqs = [
-      seq(RIDE_PAT,  (t,v) => ride.triggerAttack('D#3', t, v), 0.018),
-      seq(SNARE_PAT, (t,v) => snare.triggerAttack('D2',  t, v), 0.013),
+      seq(RIDE_PAT,  rideObj.hit,  0.018),
+      seq(SNARE_PAT, snareObj.hit, 0.013),
     ];
-    drumKitRef.current = { ride, snare, warmth, comp, bus, seqs };
+    drumKitRef.current = { ride: rideObj.inst, snare: snareObj.inst, rideHit: rideObj.hit, warmth, comp, bus, seqs };
   }
 
   // ── Play / Stop ─────────────────────────────────────────────────────────────
@@ -588,7 +606,7 @@ export default function AccompagnementPage() {
       setStatus('counting');
       for (let i = 0; i < 4; i++) {
         const t = Tone.now() + 0.05 + i * beatDur;
-        drumKitRef.current.ride.triggerAttack('D#3', t, i === 0 ? 1.0 : 0.75);
+        drumKitRef.current.rideHit(t, i === 0 ? 1.0 : 0.75);
         setTimeout(() => setCountBeat(4 - i), (i * beatDur) * 1000);
       }
       const startIn = 4 * beatDur + 0.05;
