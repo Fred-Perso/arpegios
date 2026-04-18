@@ -201,9 +201,57 @@ function buildEvents(bars: Chord[][]): { events: EvItem[]; totalBeats: number } 
   return { events, totalBeats: beat };
 }
 function bt(beat: number) { return `${Math.floor(beat / 4)}:${beat % 4}:0`; }
+function midiToNote(midi: number): string {
+  return `${NOTES[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
+}
+
+// ─── Walking bass ─────────────────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildWalkingBass(Tone: any, events: EvItem[], totalBeats: number, bus: any): { bassInst: any; bassPart: any } {
+  const bassInst = new Tone.Synth({
+    oscillator: { type: 'triangle' },
+    envelope: { attack: 0.025, decay: 0.55, sustain: 0.04, release: 0.4 },
+  }).connect(bus);
+  bassInst.volume.value = -4;
+
+  const bassNotes: { time: string; note: string }[] = [];
+  events.forEach((ev, i) => {
+    const { rootIdx, type, beats } = ev.chord;
+    const intervals = IV[type] ?? [0, 4, 7, 10];
+    const bassRoot = 36 + rootIdx; // C2 = 36
+    const walk = [0, intervals[1] ?? 4, intervals[2] ?? 7, intervals[3] ?? 10];
+
+    for (let b = 0; b < beats; b++) {
+      let midi: number;
+      if (b > 0 && b === beats - 1) {
+        // Last beat: chromatic approach (half-step below) next chord root
+        const nextRoot = 36 + events[(i + 1) % events.length].chord.rootIdx;
+        midi = nextRoot - 1;
+      } else {
+        midi = bassRoot + walk[b % walk.length];
+      }
+      while (midi > 47) midi -= 12;
+      while (midi < 28) midi += 12;
+      bassNotes.push({ time: bt(ev.beatStart + b), note: midiToNote(midi) });
+    }
+  });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const bassPart = new (Tone.Part as any)(
+    (time: number, val: { note: string }) => {
+      bassInst.triggerAttackRelease(val.note, '4n', time + 0.010);
+    },
+    bassNotes,
+  );
+  bassPart.loop = true;
+  bassPart.loopEnd = bt(totalBeats);
+  bassPart.start(0);
+  return { bassInst, bassPart };
+}
 
 // ─── Component ───────────────────────────────────────────────────────────────
 export default function AccompagnementPage() {
+  const [title,        setTitle]        = useState('Fly Me to the Moon');
   const [status,       setStatus]       = useState<'idle'|'loading'|'counting'|'playing'>('idle');
   const [countBeat,    setCountBeat]    = useState<number | null>(null);
   const [bpm,          setBpm]          = useState(120);
@@ -269,7 +317,8 @@ export default function AccompagnementPage() {
     if (!k) return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     k.seqs?.forEach((s: any) => { try { s.stop(0); s.dispose(); } catch {} });
-    ['ride','hihat','kick','snare','bus'].forEach(x => { try { k[x]?.dispose(); } catch {} });
+    try { k.bassPart?.stop(0); k.bassPart?.dispose(); } catch {}
+    ['ride','hihat','kick','snare','bassInst','bus'].forEach(x => { try { k[x]?.dispose(); } catch {} });
     drumKitRef.current = null;
   }
 
@@ -297,9 +346,9 @@ export default function AccompagnementPage() {
     kick.volume.value = -3;
 
     const snare = new Tone.NoiseSynth({
-      noise:{type:'white'}, envelope:{attack:0.001,decay:0.10,sustain:0,release:0.04},
+      noise:{type:'white'}, envelope:{attack:0.004,decay:0.28,sustain:0,release:0.12},
     }).connect(bus);
-    snare.volume.value = -15;
+    snare.volume.value = -20; // soft brushwork
 
     // lag (seconds) = "laid-back behind the beat" per instrument
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -367,8 +416,11 @@ export default function AccompagnementPage() {
       partRef.current.loopEnd = bt(totalBeats);
       partRef.current.start(0);
 
-      // Drum kit
+      // Drum kit + walking bass
       buildDrums(Tone, drumVol, drumOn);
+      const { bassInst, bassPart } = buildWalkingBass(Tone, events, totalBeats, drumKitRef.current.bus);
+      drumKitRef.current.bassInst = bassInst;
+      drumKitRef.current.bassPart = bassPart;
 
       // Count-in: 4 hi-hat clicks then start
       const beatDur = 60 / bpm;
@@ -468,6 +520,7 @@ export default function AccompagnementPage() {
   function loadGrid(grid: GridDoc) {
     if (status !== 'idle') return;
     setBars(grid.bars.map(bar => bar.chords.map(sc => buildChord(sc.rootIdx, sc.type, sc.beats))));
+    setTitle(grid.name);
     setEditCell(null);
   }
 
@@ -483,6 +536,7 @@ export default function AccompagnementPage() {
   function handleConfirmImport() {
     if (!importPreview || status !== 'idle') return;
     setBars(importPreview.bars);
+    setTitle(importPreview.title);
     setImportPreview(null); setImportText(''); setShowImport(false); setEditCell(null);
   }
 
@@ -508,9 +562,9 @@ export default function AccompagnementPage() {
         {/* Header */}
         <div>
           <Link href="/" className="text-orange-400 hover:text-orange-300 text-sm">← Retour</Link>
-          <h1 className="text-3xl font-bold mt-2">Fly Me to the Moon</h1>
+          <h1 className="text-3xl font-bold mt-2">{title}</h1>
           <p className="text-gray-400 mt-1">
-            Bart Howard · La mineur · 16 mesures · boucle
+            {bars.length} mesures · boucle
             {canEdit && <span className="ml-2 text-xs text-orange-400">— clic sur un accord pour l'éditer</span>}
           </p>
         </div>
@@ -637,7 +691,7 @@ export default function AccompagnementPage() {
               className="px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-xs text-white transition-colors">
               📥 Importer
             </button>
-            <button onClick={() => { if (status === 'idle') setBars(INITIAL); }}
+            <button onClick={() => { if (status === 'idle') { setBars(INITIAL); setTitle('Fly Me to the Moon'); } }}
               disabled={status !== 'idle'}
               className="px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-xs text-gray-300 transition-colors disabled:opacity-40">
               ↩ Fly Me
