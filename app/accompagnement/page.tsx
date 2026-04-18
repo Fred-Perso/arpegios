@@ -127,7 +127,7 @@ export default function AccompagnementPage() {
             if (playIdRef.current === playId) setCurrentFlat(val.flatIdx);
           }, delayMs);
         },
-        events.map(ev => [bt(ev.beatStart), { chord: ev.chord, flatIdx: ev.flatIdx }])
+        events.map(ev => [bt(ev.beatStart), { chord: ev.chord, flatIdx: ev.flatIdx }] as [string, { chord: Chord; flatIdx: number }])
       );
 
       partRef.current.loop    = true;
