@@ -33,6 +33,12 @@ export default function Nav() {
             Manche
           </Link>
 
+          <Link href="/accompagnement"
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
+              ${path === '/accompagnement' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>
+            Accompagnement
+          </Link>
+
           {/* Théorie dropdown */}
           <div className="relative">
             <button
