@@ -58,14 +58,29 @@ const KICK_PAT  = [0.88, null, null,  null, null, null,  0.42, null, null,  null
 // Snare: accents 2&4 + soft ghost on upbeat 2 & 4 (shuffle "cha-KA")
 const SNARE_PAT = [null, null, null,  0.72, null, 0.22,  null, null, null,  0.70, null, 0.20];
 
-// ─── Initial chart: Fly Me to the Moon ───────────────────────────────────────
+// ─── Initial chart: Fly Me to the Moon (Bart Howard) ─────────────────────────
+// Forme AA' — 16 mesures, boucle = 32 mesures à chaque chorus
+// A  (mes 1–8)  : exposition — cycle ↓5 diatonique en Do maj, cadence II–V en La min
+// A' (mes 9–16) : répétition — même harmonie, turnaround final Dm7/G7
 const INITIAL: Chord[][] = [
-  [buildChord(9,'m7')],  [buildChord(2,'m7')],   [buildChord(7,'Dom7')], [buildChord(0,'Maj7')],
-  [buildChord(5,'Maj7')],[buildChord(11,'m7b5',2),buildChord(4,'Dom7',2)],
-  [buildChord(9,'m7')],  [buildChord(4,'Dom7')],
-  [buildChord(9,'m7')],  [buildChord(2,'m7')],   [buildChord(7,'Dom7')], [buildChord(0,'Maj7')],
-  [buildChord(5,'Maj7')],[buildChord(11,'m7b5',2),buildChord(4,'Dom7',2)],
-  [buildChord(9,'m7')],  [buildChord(9,'m7')],
+  // ── A (mes 1–8) ──────────────────────────────────────────────────
+  [buildChord(9, 'm7')],                                          // 1  Am7   VIm7 en Do / Im7 en La min
+  [buildChord(2, 'm7')],                                          // 2  Dm7   IIm7 en Do   → début II–V–I
+  [buildChord(7, 'Dom7')],                                        // 3  G7    V7  en Do
+  [buildChord(0, 'Maj7')],                                        // 4  Cmaj7 I△7 en Do    → résolution
+  [buildChord(5, 'Maj7')],                                        // 5  Fmaj7 IV△7 en Do
+  [buildChord(11,'m7b5',2), buildChord(4,'Dom7',2)],              // 6  Bm7b5 | E7  → II–V en La min
+  [buildChord(9, 'm7')],                                          // 7  Am7   résolution La min
+  [buildChord(4, 'Dom7')],                                        // 8  E7    V7/Am — relance vers A
+  // ── A' (mes 9–16) ────────────────────────────────────────────────
+  [buildChord(9, 'm7')],                                          // 9  Am7
+  [buildChord(2, 'm7')],                                          // 10 Dm7
+  [buildChord(7, 'Dom7')],                                        // 11 G7
+  [buildChord(0, 'Maj7')],                                        // 12 Cmaj7
+  [buildChord(5, 'Maj7')],                                        // 13 Fmaj7
+  [buildChord(11,'m7b5',2), buildChord(4,'Dom7',2)],              // 14 Bm7b5 | E7
+  [buildChord(9, 'm7')],                                          // 15 Am7
+  [buildChord(2, 'm7',2),   buildChord(7,'Dom7',2)],              // 16 Dm7 | G7 — turnaround → retour mes 1
 ];
 
 // ─── Colors ──────────────────────────────────────────────────────────────────
@@ -298,8 +313,14 @@ export default function AccompagnementPage() {
   const [saveError,    setSaveError]    = useState<string | null>(null);
   const [saveKey,      setSaveKey]      = useState('');
   const [saveTips,     setSaveTips]     = useState('');
-  const [gridKey,      setGridKey]      = useState('');
-  const [gridTips,     setGridTips]     = useState('');
+  const [gridKey,      setGridKey]      = useState('La mineur / Do majeur');
+  const [gridTips,     setGridTips]     = useState(
+    'Cycle ↓5 diatonique : Am7→Dm7→G7→Cmaj7→Fmaj7 (5 accords consécutifs en Do majeur). ' +
+    'Deux II–V–I imbriqués : Dm7–G7–Cmaj7 (Do maj) et Bm7b5–E7–Am7 (La min). ' +
+    'Mes. 8 : E7 = V7 de La min, relance la boucle. Mes. 16 : turnaround Dm7–G7 → retour mes. 1. ' +
+    'Impro : dorien sur Dm7 · mixolydien sur G7 · lydien sur Fmaj7 · locrien sur Bm7b5. ' +
+    'La pentatonique de La min fonctionne sur toute la grille.'
+  );
   const [transposeOffset, setTransposeOffset] = useState(0);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -712,62 +733,44 @@ export default function AccompagnementPage() {
           </div>
         </div>
 
-        {/* Chord grid */}
+        {/* Chord grid — 4 cols mobile / 8 cols desktop */}
         <div className="bg-gray-800 rounded-2xl p-4">
           <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">Grille</p>
-          {(() => {
-            const PER_ROW = 8;
-            const rows: Chord[][][] = [];
-            for (let i = 0; i < bars.length; i += PER_ROW) rows.push(bars.slice(i, i + PER_ROW));
-            return (
-              <div className="space-y-2">
-                {rows.map((rowBars, rowIdx) => (
-                  <div key={rowIdx}>
-                    <div className="grid gap-1"
-                      style={{ gridTemplateColumns: `repeat(${rowBars.length}, minmax(0, 1fr))` }}>
-                      {rowBars.map((bar, offset) => {
-                        const barIdx = rowIdx * PER_ROW + offset;
-                        const isActiveBar = currentBar === barIdx;
-                        const isEditBar = editCell?.barIdx === barIdx;
-                        return (
-                          <div key={barIdx}
-                            className={`rounded-lg border p-1.5 min-h-[54px] transition-all duration-100 ${
-                              isActiveBar ? 'border-orange-400 bg-gray-700 shadow-lg shadow-orange-900/40 scale-105' :
-                              isEditBar   ? 'border-orange-300 bg-gray-700' :
-                                            'border-gray-700 bg-gray-900'
-                            }`}>
-                            <p className="text-[8px] text-gray-600 mb-1">{barIdx + 1}</p>
-                            <div className="space-y-0.5">
-                              {bar.map((chord, ci) => {
-                                const flatIdx = barFlatOffset[barIdx] + ci;
-                                const isActive = currentFlat === flatIdx;
-                                const isEditing = editCell?.barIdx === barIdx && editCell.chordIdx === ci;
-                                return (
-                                  <button key={ci} onClick={() => openEdit(barIdx, ci)}
-                                    className={`w-full text-left text-[10px] font-bold px-1 py-0.5 rounded border transition-all ${
-                                      isEditing ? 'border-orange-400 bg-orange-900/40 text-orange-200' :
-                                      isActive  ? COL_ACTIVE[chord.type] :
-                                      canEdit   ? 'border-gray-700 hover:border-gray-500 ' + (COL_IDLE[chord.type] ?? 'text-gray-400') :
-                                                  'bg-transparent border-transparent ' + (COL_IDLE[chord.type] ?? 'text-gray-400')
-                                    } ${canEdit ? 'cursor-pointer' : 'cursor-default'}`}>
-                                    {chord.name}
-                                    {bar.length > 1 && <span className="text-[7px] opacity-40 ml-0.5">{chord.beats}t</span>}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <p className="text-[9px] text-gray-600 text-center mt-0.5">
-                      mes. {rowIdx * PER_ROW + 1}–{rowIdx * PER_ROW + rowBars.length}
-                    </p>
+          <div className="grid grid-cols-4 sm:grid-cols-8 gap-1">
+            {bars.map((bar, barIdx) => {
+              const isActiveBar = currentBar === barIdx;
+              const isEditBar   = editCell?.barIdx === barIdx;
+              return (
+                <div key={barIdx}
+                  className={`rounded-lg border p-1.5 min-h-[54px] transition-all duration-100 ${
+                    isActiveBar ? 'border-orange-400 bg-gray-700 shadow-lg shadow-orange-900/40 scale-105' :
+                    isEditBar   ? 'border-orange-300 bg-gray-700' :
+                                  'border-gray-700 bg-gray-900'
+                  }`}>
+                  <p className="text-[8px] text-gray-600 mb-1">{barIdx + 1}</p>
+                  <div className="space-y-0.5">
+                    {bar.map((chord, ci) => {
+                      const flatIdx  = barFlatOffset[barIdx] + ci;
+                      const isActive  = currentFlat === flatIdx;
+                      const isEditing = editCell?.barIdx === barIdx && editCell.chordIdx === ci;
+                      return (
+                        <button key={ci} onClick={() => openEdit(barIdx, ci)}
+                          className={`w-full text-left text-[10px] font-bold px-1 py-0.5 rounded border transition-all ${
+                            isEditing ? 'border-orange-400 bg-orange-900/40 text-orange-200' :
+                            isActive  ? COL_ACTIVE[chord.type] :
+                            canEdit   ? 'border-gray-700 hover:border-gray-500 ' + (COL_IDLE[chord.type] ?? 'text-gray-400') :
+                                        'bg-transparent border-transparent ' + (COL_IDLE[chord.type] ?? 'text-gray-400')
+                          } ${canEdit ? 'cursor-pointer' : 'cursor-default'}`}>
+                          {chord.name}
+                          {bar.length > 1 && <span className="text-[7px] opacity-40 ml-0.5">{chord.beats}t</span>}
+                        </button>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
-            );
-          })()}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Archive */}
