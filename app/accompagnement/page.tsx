@@ -58,14 +58,14 @@ function buildChord(rootIdx: number, type: string, beats = 4): Chord {
 
 // ─── Drum patterns — 12 triplet-8th steps per bar ────────────────────────────
 // Layout: [beat1-down, beat1-mid, beat1-up,  beat2-down, …,  beat4-down, beat4-mid, beat4-up]
-// Ride: strong downbeats (long) / soft upbeats (short) → long-short shuffle
-const RIDE_PAT  = [0.95, null, 0.38,  0.82, null, 0.36,  0.92, null, 0.38,  0.80, null, 0.35];
-// Hi-hat foot on 2 & 4 (stays on-beat — anchors time)
-const HIHAT_PAT = [null, null, null,  0.92, null, null,  null, null, null,  0.90, null, null];
-// Kick: lazy beat 1, ghost on beat 3 (pocket feel)
-const KICK_PAT  = [0.88, null, null,  null, null, null,  0.42, null, null,  null, null, null];
-// Snare: accents 2&4 + soft ghost on upbeat 2 & 4 (shuffle "cha-KA")
-const SNARE_PAT = [null, null, null,  0.72, null, 0.22,  null, null, null,  0.70, null, 0.20];
+// Art Blakey spang-a-lang: strong on 1&3, soft triplet "a" upbeats
+const RIDE_PAT  = [0.90, null, 0.55,  0.85, null, 0.52,  0.88, null, 0.55,  0.82, null, 0.50];
+// Hi-hat foot on 2 & 4 (anchors time)
+const HIHAT_PAT = [null, null, null,  0.94, null, null,  null, null, null,  0.92, null, null];
+// Feathered kick on all 4 beats (very soft — hard-bop pocket feel)
+const KICK_PAT  = [0.38, null, null,  0.22, null, null,  0.32, null, null,  0.20, null, null];
+// Snare: ghost notes + accents on 2&4 (Blakey ghost-note texture)
+const SNARE_PAT = [null, 0.12, null,  0.85, null, 0.14,  null, 0.12, null,  0.83, null, 0.15];
 
 // ─── Initial chart: Fly Me to the Moon (Bart Howard) — 32 mesures ────────────
 // Forme Intro–A–B–C  (4 × 8 mesures)
@@ -252,21 +252,42 @@ function midiToNote(midi: number): string {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildWalkingBass(Tone: any, events: EvItem[], totalBeats: number, instrument: any): { bassPart: any } {
   const bassNotes: { time: string; note: string }[] = [];
+  // Approach direction cycles by barIdx: ½-below, ½-above, whole-below, whole-above
+  const APPROACH = [-1, 1, -2, 2];
+
   events.forEach((ev, i) => {
     const { rootIdx, type, beats } = ev.chord;
     const intervals = IV[type] ?? [0, 4, 7, 10];
     const bassRoot = 36 + rootIdx; // C2 = 36
-    const walk = [0, intervals[1] ?? 4, intervals[2] ?? 7, intervals[3] ?? 10];
+    const chordTones = intervals.map(d => bassRoot + d);
+    const nextRoot = 36 + events[(i + 1) % events.length].chord.rootIdx;
 
     for (let b = 0; b < beats; b++) {
       let midi: number;
-      if (b > 0 && b === beats - 1) {
-        // Last beat: chromatic approach (half-step below) next chord root
-        const nextRoot = 36 + events[(i + 1) % events.length].chord.rootIdx;
-        midi = nextRoot - 1;
+
+      if (b === 0) {
+        // Beat 1: root — occasional low octave displacement for variety
+        midi = bassRoot;
+        if ((i * 7 + ev.barIdx * 3) % 5 === 0) midi -= 12;
+      } else if (b === beats - 1 && beats > 1) {
+        // Last beat: approach to next chord root (direction varies by barIdx)
+        midi = nextRoot + APPROACH[ev.barIdx % 4];
       } else {
-        midi = bassRoot + walk[b % walk.length];
+        // Inner beats: 8-way hash picks from chord tones + chromatic passing notes
+        const h = (i * 7 + b * 3 + ev.barIdx * 5) % 8;
+        const inner = [
+          chordTones[1],       // 3rd
+          chordTones[2],       // 5th
+          chordTones[3],       // 7th
+          chordTones[2],       // 5th (doubled — most common walking choice)
+          bassRoot - 1,        // chromatic ½-step below root
+          bassRoot + 2,        // whole-step above root (leading)
+          chordTones[1] - 1,   // chromatic below 3rd
+          chordTones[3] - 1,   // chromatic below 7th
+        ];
+        midi = inner[h];
       }
+
       while (midi > 47) midi -= 12;
       while (midi < 28) midi += 12;
       bassNotes.push({ time: bt(ev.beatStart + b), note: midiToNote(midi) });
@@ -286,26 +307,38 @@ function buildWalkingBass(Tone: any, events: EvItem[], totalBeats: number, instr
   return { bassPart };
 }
 
-// ─── Jazz comp patterns (4 bars, then repeats) ───────────────────────────────
+// ─── Jazz comp patterns (8 bars, then repeats) ───────────────────────────────
 // n = [root, 3rd, 5th, 7th]  |  beatOffset = position within the chord (0–3)
 type CompHit = { beatOffset: number; notes: string[]; dur: string; vel: number };
 
 function getCompHits(barIdx: number, n: string[]): CompHit[] {
-  switch (barIdx % 4) {
-    case 0: return [ // 1 hit — shell sur le 2
+  switch (barIdx % 8) {
+    case 0: return [ // shell on beat 2 only
       { beatOffset: 1, notes: [n[1], n[3]],       dur: '4n', vel: 0.63 },
     ];
-    case 1: return [ // 2 hits — 2 + 4 (classique jazz)
+    case 1: return [ // classic 2 + 4 (standard swing comp)
       { beatOffset: 1, notes: [n[1], n[3]],       dur: '4n', vel: 0.65 },
       { beatOffset: 3, notes: [n[1], n[2], n[3]], dur: '8n', vel: 0.50 },
     ];
-    case 2: return [ // 2 hits — 1 léger + 3
+    case 2: return [ // light beat 1 + shell beat 3
       { beatOffset: 0, notes: [n[0], n[2]],       dur: '4n', vel: 0.42 },
       { beatOffset: 2, notes: [n[1], n[3]],       dur: '4n', vel: 0.60 },
     ];
-    case 3: return [ // 1 hit — close sur le 3 (espace maximum)
+    case 3: return [ // single hit beat 3 — maximum air
       { beatOffset: 2, notes: [n[1], n[2], n[3]], dur: '4n', vel: 0.58 },
     ];
+    case 4: return [ // beats 1 + 3 — strong statement
+      { beatOffset: 0, notes: [n[1], n[3]],       dur: '4n', vel: 0.55 },
+      { beatOffset: 2, notes: [n[1], n[2], n[3]], dur: '4n', vel: 0.62 },
+    ];
+    case 5: return [ // anticipation — beat 4 only
+      { beatOffset: 3, notes: [n[0], n[1], n[3]], dur: '8n', vel: 0.52 },
+    ];
+    case 6: return [ // consecutive beats 2 + 3
+      { beatOffset: 1, notes: [n[1], n[3]],       dur: '8n', vel: 0.60 },
+      { beatOffset: 2, notes: [n[0], n[2], n[3]], dur: '4n', vel: 0.55 },
+    ];
+    case 7: return []; // complete silence — breathing room
     default: return [];
   }
 }
@@ -401,61 +434,90 @@ export default function AccompagnementPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     k.seqs?.forEach((s: any) => { try { s.stop(0); s.dispose(); } catch {} });
     try { k.bassPart?.stop(0); k.bassPart?.dispose(); } catch {}
-    ['ride','hihat','kick','snare','snareFilter','comp','bus'].forEach(x => { try { k[x]?.dispose(); } catch {} });
+    ['ride','hihat','kick','snare','snareFilter','tomH','tomF','warmth','comp','bus'].forEach(x => {
+      try { k[x]?.dispose(); } catch {}
+    });
     drumKitRef.current = null;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function buildDrums(Tone: any, vol: number, enabled: boolean) {
     disposeDrums();
-    const bus  = new Tone.Gain(enabled ? vol / 100 : 0).toDestination();
-    const comp = new Tone.Compressor({ threshold: -18, ratio: 4, attack: 0.003, release: 0.12 }).connect(bus);
 
-    // Ride cymbal — long decay, rich harmonics (jazz cymbal feel)
+    // Vintage Blue Note chain: instruments → comp → warmth → bus → destination
+    const bus     = new Tone.Gain(enabled ? vol / 100 : 0).toDestination();
+    const warmth  = new Tone.Distortion({ distortion: 0.04, wet: 0.12 }).connect(bus);
+    const comp    = new Tone.Compressor({ threshold: -18, ratio: 4, attack: 0.003, release: 0.12 }).connect(warmth);
+
+    // Ride cymbal — Art Blakey spang-a-lang: long resonant decay
     const ride = new Tone.MetalSynth({
-      frequency:340, harmonicity:5.1, modulationIndex:32,
-      envelope:{attack:0.001,decay:1.1,release:0.8}, resonance:3600, octaves:1.5,
+      frequency:330, harmonicity:5.1, modulationIndex:32,
+      envelope:{attack:0.001,decay:1.2,release:0.9}, resonance:3400, octaves:1.5,
     }).connect(comp);
-    ride.volume.value = -8;
+    ride.volume.value = -7;
 
-    // Hi-hat foot (2 & 4) — tight, closed
+    // Hi-hat foot (2 & 4) — tight, authoritative
     const hihat = new Tone.MetalSynth({
       frequency:1000, harmonicity:5.1, modulationIndex:14,
       envelope:{attack:0.001,decay:0.06,release:0.03}, resonance:8000, octaves:1.5,
     }).connect(comp);
-    hihat.volume.value = -14;
+    hihat.volume.value = -13;
 
-    // Kick — deeper, more body
+    // Kick — deep, feathered (all 4 beats, very soft)
     const kick = new Tone.MembraneSynth({
-      pitchDecay:0.06, octaves:7,
-      envelope:{attack:0.001,decay:0.35,sustain:0,release:0.15},
+      pitchDecay:0.07, octaves:7,
+      envelope:{attack:0.001,decay:0.38,sustain:0,release:0.15},
     }).connect(comp);
-    kick.volume.value = -1;
+    kick.volume.value = -3;
 
-    // Snare brushes — bandpass-filtered noise for that whispery brush sound
+    // Snare — bandpass-filtered noise: ghost notes + accents
     const snareFilter = new Tone.Filter(1400, 'bandpass', -24).connect(comp);
     const snare = new Tone.NoiseSynth({
-      noise:{type:'white'}, envelope:{attack:0.004,decay:0.30,sustain:0,release:0.14},
+      noise:{type:'white'}, envelope:{attack:0.003,decay:0.28,sustain:0,release:0.12},
     }).connect(snareFilter);
-    snare.volume.value = -16;
+    snare.volume.value = -15;
+
+    // High tom (triplet fills)
+    const tomH = new Tone.MembraneSynth({
+      pitchDecay:0.04, octaves:5,
+      envelope:{attack:0.001,decay:0.25,sustain:0,release:0.10},
+    }).connect(comp);
+    tomH.volume.value = -5;
+
+    // Floor tom (fill resolutions)
+    const tomF = new Tone.MembraneSynth({
+      pitchDecay:0.07, octaves:5,
+      envelope:{attack:0.001,decay:0.42,sustain:0,release:0.14},
+    }).connect(comp);
+    tomF.volume.value = -3;
+
+    // 96-step tom fill pattern (8 bars × 12 steps) — fill on last 8 steps of bar 8
+    const tomHFill = Array.from({length:96}, (_,i) =>
+      ({88:0.62,90:0.68,92:0.65,94:0.72} as Record<number,number>)[i] ?? null
+    ) as (number|null)[];
+    const tomFFill = Array.from({length:96}, (_,i) =>
+      ({91:0.70,93:0.76,95:0.82} as Record<number,number>)[i] ?? null
+    ) as (number|null)[];
 
     // lag (seconds) = "laid-back behind the beat" per instrument
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const seq = (pat: (number|null)[], hit: (t:number,v:number)=>void, lag=0): any => {
+    const seq = (pat: (number|null)[], hit: (t:number,v:number)=>void, lag=0, subdiv='8t'): any => {
       const s = new Tone.Sequence(
         (time: number, vel: number | null) => { if (vel !== null) hit(time + lag, vel); },
-        pat, '8t' // triplet 8th notes → authentic swing feel
+        pat, subdiv
       );
       s.loop = true; s.start(0); return s;
     };
 
     const seqs = [
-      seq(RIDE_PAT,  (t,v) => ride.triggerAttackRelease('8t',   t, v), 0.018), // ride: laidback
-      seq(HIHAT_PAT, (t,v) => hihat.triggerAttackRelease('16n',  t, v), 0),     // hihat: on the beat
-      seq(KICK_PAT,  (t,v) => kick.triggerAttackRelease('C1','8n',t, v), 0.020),// kick: lazy pocket
-      seq(SNARE_PAT, (t,v) => snare.triggerAttackRelease('16n',  t, v), 0.013), // snare: slightly late
+      seq(RIDE_PAT,  (t,v) => ride.triggerAttackRelease('8t',    t, v), 0.018),
+      seq(HIHAT_PAT, (t,v) => hihat.triggerAttackRelease('16n',  t, v), 0),
+      seq(KICK_PAT,  (t,v) => kick.triggerAttackRelease('C1','8n',t, v), 0.020),
+      seq(SNARE_PAT, (t,v) => snare.triggerAttackRelease('16n',  t, v), 0.013),
+      seq(tomHFill,  (t,v) => tomH.triggerAttackRelease('G2','8n',t, v), 0.010),
+      seq(tomFFill,  (t,v) => tomF.triggerAttackRelease('C2','8n',t, v), 0.010),
     ];
-    drumKitRef.current = { ride, hihat, kick, snare, snareFilter, comp, bus, seqs };
+    drumKitRef.current = { ride, hihat, kick, snare, snareFilter, tomH, tomF, warmth, comp, bus, seqs };
   }
 
   // ── Play / Stop ─────────────────────────────────────────────────────────────
