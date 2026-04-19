@@ -445,7 +445,6 @@ export default function AccompagnementPage() {
   function buildDrums(Tone: any, vol: number, enabled: boolean) {
     disposeDrums();
 
-    Tone.Transport.cancel();
     Tone.Transport.swing = DRUM_SWING;
     Tone.Transport.swingSubdivision = '8n';
 
@@ -561,6 +560,9 @@ export default function AccompagnementPage() {
 
         loadedRef.current = true;
       }
+
+      // Vider la file Transport avant de tout scheduler
+      Tone.Transport.cancel();
 
       // Chord part — jazz swing comping
       const { events, totalBeats } = buildEvents(bars);
