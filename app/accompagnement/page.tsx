@@ -26,6 +26,15 @@ const SAMPLE_MAP: Record<string, string> = {
   A7:'A7.mp3', C8:'C8.mp3',
 };
 
+// ─── Guitare jazz (FluidR3 GM electric guitar jazz) ──────────────────────────
+const GUITAR_URL = 'https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/electric_guitar_jazz-mp3/';
+const GUITAR_MAP: Record<string, string> = {
+  'E2':'E2.mp3', 'G2':'G2.mp3', 'B2':'B2.mp3',
+  'E3':'E3.mp3', 'G3':'G3.mp3', 'B3':'B3.mp3',
+  'E4':'E4.mp3', 'G4':'G4.mp3', 'B4':'B4.mp3',
+  'E5':'E5.mp3', 'G5':'G5.mp3',
+};
+
 // ─── Contrebasse (FluidR3 GM acoustic bass) ───────────────────────────────────
 const BASS_URL = 'https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/acoustic_bass-mp3/';
 
@@ -34,6 +43,163 @@ const BASS_MAP: Record<string, string> = {
   'E2':'E2.mp3', 'G2':'G2.mp3',
   'E3':'E3.mp3', 'G3':'G3.mp3',
 };
+
+// ─── Fretboard engine ────────────────────────────────────────────────────────
+const STR_MIDI = [40, 45, 50, 55, 59, 64]; // E2 A2 D3 G3 B3 E4
+
+type ShapeFrets = (number | null)[];
+const CHORD_SHAPES: Record<string, { frets: ShapeFrets; label: string }[]> = {
+  Maj7:  [
+    { frets: [null,3,2,4,5,null], label:'Pos. A' },
+    { frets: [8,7,9,9,8,null],    label:'Pos. E' },
+    { frets: [null,null,2,4,5,3], label:'Drop 2' },
+  ],
+  m7:    [
+    { frets: [null,3,5,3,4,null], label:'Pos. A' },
+    { frets: [8,6,8,8,8,null],    label:'Pos. E' },
+    { frets: [null,null,1,3,4,3], label:'Drop 2' },
+  ],
+  Dom7:  [
+    { frets: [null,3,2,3,5,null], label:'Pos. A' },
+    { frets: [8,7,8,9,8,null],    label:'Pos. E' },
+    { frets: [null,null,2,3,5,3], label:'Drop 2' },
+  ],
+  m7b5:  [
+    { frets: [null,3,4,3,4,null], label:'Pos. A' },
+    { frets: [8,9,8,8,7,null],    label:'Pos. E' },
+    { frets: [null,null,1,3,4,2], label:'Drop 2' },
+  ],
+  mMaj7: [
+    { frets: [null,3,5,4,4,null], label:'Pos. A' },
+    { frets: [8,6,9,8,8,null],    label:'Pos. E' },
+    { frets: [null,null,1,4,4,3], label:'Drop 2' },
+  ],
+  dim7:  [
+    { frets: [null,3,4,2,4,null], label:'Pos. A' },
+    { frets: [8,null,7,8,7,null], label:'Pos. E' },
+    { frets: [null,null,1,2,1,2], label:'Drop 2' },
+  ],
+};
+
+const ARP_WINS = [
+  { label:'Pos. I',   min:0,  max:4  },
+  { label:'Pos. II',  min:3,  max:7  },
+  { label:'Pos. III', min:5,  max:9  },
+  { label:'Pos. IV',  min:7,  max:11 },
+  { label:'Pos. V',   min:9,  max:13 },
+];
+
+function transposeShape(frets: ShapeFrets, rootIdx: number): ShapeFrets {
+  return frets.map(f => {
+    if (f === null) return null;
+    let t = f + rootIdx;
+    while (t > 16) t -= 12;
+    while (t < 0)  t += 12;
+    return t;
+  });
+}
+
+function getArpDots(rootIdx: number, type: string) {
+  const ivs = ({ Maj7:[0,4,7,11], m7:[0,3,7,10], Dom7:[0,4,7,10], m7b5:[0,3,6,10], mMaj7:[0,3,7,11], dim7:[0,3,6,9] } as Record<string,number[]>)[type] ?? [0,4,7,11];
+  const out: { s:number; f:number; isRoot:boolean }[] = [];
+  for (let s = 0; s < 6; s++)
+    for (let f = 0; f <= 15; f++) {
+      const iv = (STR_MIDI[s] + f - rootIdx + 120) % 12;
+      if (ivs.includes(iv)) out.push({ s, f, isRoot: iv === 0 });
+    }
+  return out;
+}
+
+// ─── Diagram components ───────────────────────────────────────────────────────
+// Horizontal fretboard diagram (strings = horizontal lines, frets = vertical lines)
+// frets array: [str6(E-low), str5(A), str4(D), str3(G), str2(B), str1(e-high)]
+// Display top→bottom: e(high) … E(low)
+const STR_LABELS = ['e','B','G','D','A','E']; // display order top→bottom
+
+function ChordDiagram({ frets, label }: { frets: ShapeFrets; label: string }) {
+  const display = [...frets].reverse(); // [e,B,G,D,A,E] top→bottom
+  const frettedPos = frets.filter((f): f is number => f !== null && f > 0);
+  const hasOpen = frets.some(f => f === 0);
+  const minF = frettedPos.length ? Math.min(...frettedPos) : 1;
+  const showNut = hasOpen || minF <= 2;
+  const start = showNut ? 0 : minF - 1;
+  const SLOTS = 5;
+  // SVG dimensions
+  const VW = 220, VH = 68;
+  const pL = 26, pR = 6, pT = 6, pB = 6;
+  const sg = (VH - pT - pB) / 5;          // gap between strings
+  const fg = (VW - pL - pR) / SLOTS;      // gap between fret lines
+  const sy = (di: number) => pT + di * sg; // y for display-string di (0=top=e)
+  const fx = (slot: number) => pL + (slot + 0.5) * fg;
+  return (
+    <div className="select-none">
+      <p className="text-[9px] text-gray-500 mb-0.5">{label}</p>
+      <svg width="100%" viewBox={`0 0 ${VW} ${VH}`}>
+        {/* Nut */}
+        {showNut
+          ? <line x1={pL} y1={pT} x2={pL} y2={VH-pB} stroke="#e5e7eb" strokeWidth="2.5"/>
+          : <text x={pL-3} y={pT} fontSize="7" fill="#6b7280" textAnchor="end" dominantBaseline="hanging">{start+1}fr</text>}
+        {/* Fret lines */}
+        {Array.from({length:SLOTS+1},(_,i)=>(
+          <line key={i} x1={pL+i*fg} y1={pT} x2={pL+i*fg} y2={VH-pB} stroke="#374151" strokeWidth="0.8"/>
+        ))}
+        {/* Strings */}
+        {display.map((f,di)=>(
+          <line key={di} x1={pL} y1={sy(di)} x2={VW-pR} y2={sy(di)}
+            stroke={f===null?'#1f2937':'#52525b'} strokeWidth="0.9"/>
+        ))}
+        {/* String labels */}
+        {STR_LABELS.map((n,di)=>(
+          <text key={di} x={pL-14} y={sy(di)} fontSize="7" fill="#6b7280" textAnchor="middle" dominantBaseline="middle">{n}</text>
+        ))}
+        {/* Mute / open / dots */}
+        {display.map((f,di)=>{
+          if (f === null) return <text key={di} x={pL-6} y={sy(di)} fontSize="9" fill="#ef4444" opacity="0.8" textAnchor="middle" dominantBaseline="middle">×</text>;
+          if (f === 0)    return <circle key={di} cx={pL-6} cy={sy(di)} r="4" fill="none" stroke="#9ca3af" strokeWidth="1.2"/>;
+          const slot = f - start - 1;
+          if (slot < 0 || slot >= SLOTS) return null;
+          return <circle key={di} cx={fx(slot)} cy={sy(di)} r="5.5" fill="#f97316"/>;
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function ArpDiagram({ dots, min, max, label }: { dots:{s:number;f:number;isRoot:boolean}[]; min:number; max:number; label:string }) {
+  // s=0 → E(low, display bottom), s=5 → e(high, display top)
+  const visible = dots.filter(d => d.f > min && d.f <= max);
+  const SLOTS = max - min;
+  const VW = 220, VH = 64;
+  const pL = 26, pR = 6, pT = 5, pB = 5;
+  const sg = (VH - pT - pB) / 5;
+  const fg = (VW - pL - pR) / SLOTS;
+  const sy = (s: number) => pT + (5-s) * sg; // s=5(e)→top, s=0(E)→bottom
+  const fx = (f: number) => pL + (f - min - 0.5) * fg;
+  return (
+    <div className="select-none">
+      <p className="text-[9px] text-gray-500 mb-0.5">{label}</p>
+      <svg width="100%" viewBox={`0 0 ${VW} ${VH}`}>
+        {min === 0
+          ? <line x1={pL} y1={pT} x2={pL} y2={VH-pB} stroke="#e5e7eb" strokeWidth="2.5"/>
+          : <text x={pL-3} y={pT} fontSize="7" fill="#6b7280" textAnchor="end" dominantBaseline="hanging">{min+1}fr</text>}
+        {Array.from({length:SLOTS+1},(_,i)=>(
+          <line key={i} x1={pL+i*fg} y1={pT} x2={pL+i*fg} y2={VH-pB} stroke="#374151" strokeWidth="0.8"/>
+        ))}
+        {Array.from({length:6},(_,si)=>(
+          <line key={si} x1={pL} y1={sy(si)} x2={VW-pR} y2={sy(si)} stroke="#374151" strokeWidth="0.8"/>
+        ))}
+        {STR_LABELS.map((n,di)=>(
+          <text key={di} x={pL-14} y={sy(5-di)} fontSize="7" fill="#4b5563" textAnchor="middle" dominantBaseline="middle">{n}</text>
+        ))}
+        {visible.map((d,i)=>(
+          <circle key={i} cx={fx(d.f)} cy={sy(d.s)} r="5"
+            fill={d.isRoot?'#f97316':'#3b82f6'}
+            stroke={d.isRoot?'#fed7aa':'none'} strokeWidth="1"/>
+        ))}
+      </svg>
+    </div>
+  );
+}
 
 // ─── Music helpers ───────────────────────────────────────────────────────────
 const NOTES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'] as const;
@@ -56,16 +222,36 @@ function buildChord(rootIdx: number, type: string, beats = 4): Chord {
   return { name:`${NOTES[rootIdx]}${TYPE_SYM[type]}`, notes, beats, type, rootIdx };
 }
 
-// ─── Drum pattern — 8 croches swinguées (swing 0.55) ─────────────────────────
-// R=ride fort  r=ride léger  H=hihat  k=kick  s=snare léger  S=snare fort  .=silence
-const DRUM_SWING = 0.667; // ratio 2:1 triolet (noire-croche)
+// ─── Drum pattern — 8 croches swinguées ──────────────────────────────────────
+// Ride      : R=fort(1.0)  r=léger(0.55)
+// Hihat ferm: H=fort(0.88) h=léger(0.55)
+// Hihat ouv : O=fort(0.90) o=léger(0.70)
+// Snare     : S=fort(0.86) s=léger(0.44)
+// Kick      : K=fort(0.85) k=léger(0.55)
+// Crash     : X=fort(0.80) x=léger(0.45)
+// China     : Z=fort(0.85) z=léger(0.50)  — son "trash" inversé
+// Splash    : P=fort(0.75) p=léger(0.40)  — crash court ~0.3s
+// silence   : .
+const DRUM_SWING = 0.680; // ratio 2:1 triolet (noire-croche)
 const DRUM_PAT = {
-  ride:  ['r', '.', '.', '.', 'r', '.', '.', '.'],
-  hihat: ['.', '.', '.', '.', '.', '.', '.', '.'],
-  snare: ['s', '.', 's', '.', 's', '.', 's', 's'],
+  ride:        ['r', '.', 'r', 'r', 'r', '.', 'r', 'r'],
+  hihat:       ['.', '.', '.', '.', '.', '.', '.', '.'],
+  snareSweep:  ['s', 's', 's', 's', 's', 's', 's', 's'], // balayage continu (main gauche)
+  snareTap:    ['.', '.', 's', '.', '.', '.', 's', '.'], 
+  kick:        ['.', '.', '.', '.', '.', '.', '.', '.'],
+  crash:      ['.', '.', '.', '.', '.', '.', '.', '.'],
+  china:      ['.', '.', '.', '.', '.', '.', '.', '.'],
+  splash:     ['.', '.', '.', '.', '.', '.', '.', '.'],
 } as const;
 const DRUM_VEL: Record<string, number> = {
-  R: 0.95, r: 0.55, H: 0.88, s: 0.44, S: 0.86,
+  R: 1.00, r: 0.05,
+  H: 0.88, h: 0.55,
+  O: 0.90, o: 0.70,
+  S: 0.86, s: 0.22,
+  K: 0.85, k: 0.55,
+  X: 0.80, x: 0.45,
+  Z: 0.85, z: 0.50,
+  P: 0.75, p: 0.40,
 };
 
 // ─── Initial chart: Fly Me to the Moon (Bart Howard) — 32 mesures ────────────
@@ -382,17 +568,25 @@ export default function AccompagnementPage() {
     'Impro : penta La min sur toute la grille · dorien/Dm7 · mixolydien/G7 · lydien/Fmaj7 · locrien/Bm7b5.'
   );
   const [transposeOffset, setTransposeOffset] = useState(0);
+  const [instrument,      setInstrument]      = useState<'piano'|'guitar'>('piano');
+  const [viewChord,       setViewChord]       = useState<Chord | null>(null);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const samplerRef     = useRef<any>(null);
+  const samplerRef       = useRef<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const bassSamplerRef = useRef<any>(null);
+  const guitarSamplerRef = useRef<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const partRef        = useRef<any>(null);
+  const bassSamplerRef   = useRef<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const drumKitRef     = useRef<any>(null);
-  const loadedRef      = useRef(false);
-  const playIdRef      = useRef(0);
+  const partRef          = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const drumKitRef       = useRef<any>(null);
+  const loadedRef        = useRef(false);
+  const guitarLoadedRef  = useRef(false);
+  const instrumentRef    = useRef<'piano'|'guitar'>('piano');
+  const playIdRef        = useRef(0);
+
+  useEffect(() => { instrumentRef.current = instrument; }, [instrument]);
 
   // Load localStorage grids on mount (fallback when Firebase unavailable)
   useEffect(() => {
@@ -434,13 +628,13 @@ export default function AccompagnementPage() {
     if (!k) return;
     try { k.drumPart?.stop(0); k.drumPart?.dispose(); } catch {}
     try { k.bassPart?.stop(0); k.bassPart?.dispose(); } catch {}
-    ['ride','rideRev','hihat','snareBody','snareWire','snareWireFilter','warmth','comp','bus'].forEach(x => {
+    ['ride','rideRev','hihat','openHihat','snareBody','snareWire','snareWireFilter',
+     'kick','crash','crashRev','china','chinaRev','splash','warmth','comp','bus'].forEach(x => {
       try { k[x]?.dispose(); } catch {}
     });
     drumKitRef.current = null;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function buildDrums(Tone: any, vol: number, enabled: boolean) {
     disposeDrums();
@@ -451,7 +645,7 @@ export default function AccompagnementPage() {
     const rideRev = new Tone.Freeverb({ roomSize: 0.75, dampening: 3500, wet: 0.30 }).connect(comp);
     const ride = new Tone.MetalSynth({
       frequency: 500, harmonicity: 5.1, modulationIndex: 64,
-      envelope: { attack: 0.001, decay: 1.5, release: 3.0 }, resonance: 5500, octaves: 2.2,
+      envelope: { attack: 0.001, decay: 1.5, sustain: 0, release: 0.1 }, resonance: 5500, octaves: 2.2,
     }).connect(rideRev);
     ride.volume.value = 5;
 
@@ -474,13 +668,54 @@ export default function AccompagnementPage() {
     }).connect(snareWireFilter);
     snareWire.volume.value = -12;
 
-    const rideHit  = (t: number, v: number) => ride.triggerAttack(t, v);
+    // ── Open hi-hat (decay long ~0.35s)
+    const openHihat = new Tone.MetalSynth({
+      frequency: 1100, harmonicity: 5.1, modulationIndex: 16,
+      envelope: { attack: 0.001, decay: 0.35, release: 0.20 }, resonance: 9000, octaves: 1.2,
+    }).connect(comp);
+    openHihat.volume.value = -10;
+
+    // ── Kick (grosse caisse)
+    const kick = new Tone.MembraneSynth({
+      pitchDecay: 0.05, octaves: 6,
+      envelope: { attack: 0.001, decay: 0.35, sustain: 0, release: 0.10 },
+    }).connect(comp);
+    kick.volume.value = 2;
+
+    // ── Crash
+    const crashRev = new Tone.Freeverb({ roomSize: 0.90, dampening: 2000, wet: 0.45 }).connect(comp);
+    const crash = new Tone.MetalSynth({
+      frequency: 280, harmonicity: 5.8, modulationIndex: 40,
+      envelope: { attack: 0.001, decay: 3.0, sustain: 0, release: 0.1 }, resonance: 4000, octaves: 3.0,
+    }).connect(crashRev);
+    crash.volume.value = 0;
+
+    // ── China (son "trash" — fréquence basse, harmonicité élevée, octaves larges)
+    const chinaRev = new Tone.Freeverb({ roomSize: 0.80, dampening: 1500, wet: 0.35 }).connect(comp);
+    const china = new Tone.MetalSynth({
+      frequency: 220, harmonicity: 8.5, modulationIndex: 48,
+      envelope: { attack: 0.001, decay: 2.0, sustain: 0, release: 0.1 }, resonance: 3200, octaves: 4.0,
+    }).connect(chinaRev);
+    china.volume.value = -2;
+
+    // ── Splash (crash très court ~0.3s)
+    const splash = new Tone.MetalSynth({
+      frequency: 380, harmonicity: 6.2, modulationIndex: 32,
+      envelope: { attack: 0.001, decay: 0.30, sustain: 0, release: 0.1 }, resonance: 4800, octaves: 2.5,
+    }).connect(crashRev); // partage la reverb du crash
+    splash.volume.value = -4;
+
+    const rideHit  = (t: number, v: number) => ride.triggerAttackRelease(500, '4n', t, v);
     const snareHit = (t: number, v: number) => {
       if (v > 0.50) snareBody.triggerAttackRelease('C3', '32n', t, v * 0.8);
       snareWire.triggerAttackRelease('32n', t, v);
     };
 
-    drumKitRef.current = { ride, rideRev, hihat, snareBody, snareWire, snareWireFilter, rideHit, snareHit, warmth, comp, bus };
+    drumKitRef.current = {
+      ride, rideRev, hihat, openHihat, snareBody, snareWire, snareWireFilter,
+      kick, crash, crashRev, china, chinaRev, splash,
+      rideHit, snareHit, warmth, comp, bus,
+    };
   }
 
   // Drum Part — temps "0:beat:2" (croche droite), swing ajouté dans le callback
@@ -496,20 +731,37 @@ export default function AccompagnementPage() {
       const isUp  = step % 2 === 1;
       const time  = isUp ? `0:${beat}:2` : `0:${beat}:0`;
 
+      const vel = (tok: string) => Math.min(1, DRUM_VEL[tok] ?? 0);
       const r: string = DRUM_PAT.ride[step];
-      if (r !== '.') events.push({ time, hit: 'ride',  vel: DRUM_VEL[r], isUp });
+      if (r !== '.') events.push({ time, hit: 'ride',        vel: vel(r),  isUp });
       const h: string = DRUM_PAT.hihat[step];
-      if (h !== '.') events.push({ time, hit: 'hihat', vel: DRUM_VEL[h], isUp });
-      const s: string = DRUM_PAT.snare[step];
-      if (s !== '.') events.push({ time, hit: 'snare', vel: DRUM_VEL[s], isUp });
+      if (h !== '.') events.push({ time, hit: 'hihat',       vel: vel(h),  isUp });
+      const sw: string = DRUM_PAT.snareSweep[step];
+      if (sw !== '.') events.push({ time, hit: 'snareSweep', vel: vel(sw), isUp });
+      const st: string = DRUM_PAT.snareTap[step];
+      if (st !== '.') events.push({ time, hit: 'snareTap',   vel: vel(st), isUp });
+      const k: string = DRUM_PAT.kick[step];
+      if (k !== '.') events.push({ time, hit: 'kick',        vel: vel(k),  isUp });
+      const c: string = DRUM_PAT.crash[step];
+      if (c !== '.') events.push({ time, hit: 'crash',       vel: vel(c),  isUp });
+      const z: string = DRUM_PAT.china[step];
+      if (z !== '.') events.push({ time, hit: 'china',       vel: vel(z),  isUp });
+      const p: string = DRUM_PAT.splash[step];
+      if (p !== '.') events.push({ time, hit: 'splash',      vel: vel(p),  isUp });
     }
 
     const part = new (Tone.Part as any)(
       (time: number, val: DE) => {
+        if (val.vel <= 0) return;
         const t = val.isUp ? time + swingLag : time;
-        if (val.hit === 'ride')  kit.rideHit(t, val.vel);
-        if (val.hit === 'hihat') kit.hihat.triggerAttackRelease('16n', t, val.vel);
-        if (val.hit === 'snare') kit.snareHit(t, val.vel);
+        if (val.hit === 'ride')      kit.rideHit(t, val.vel);
+        if (val.hit === 'hihat')       kit.hihat.triggerAttackRelease(1100, '16n', t, val.vel);
+        if (val.hit === 'snareSweep') kit.snareWire.triggerAttackRelease('16n', t, val.vel * 0.6);
+        if (val.hit === 'snareTap')   kit.snareHit(t, val.vel);
+        if (val.hit === 'kick')      kit.kick.triggerAttackRelease('C1', '8n', t, val.vel);
+        if (val.hit === 'crash')     kit.crash.triggerAttackRelease(280, '1m', t, val.vel);
+        if (val.hit === 'china')     kit.china.triggerAttackRelease(220, '1m', t, val.vel);
+        if (val.hit === 'splash')    kit.splash.triggerAttackRelease(380, '4n', t, val.vel);
       },
       events,
     );
@@ -573,6 +825,20 @@ export default function AccompagnementPage() {
         loadedRef.current = true;
       }
 
+      // Guitar — lazy load on first use
+      if (instrumentRef.current === 'guitar' && !guitarLoadedRef.current) {
+        setStatus('loading');
+        const guitarRev = new Tone.Reverb({ decay: 1.5, wet: 0.15 }).toDestination();
+        await new Promise<void>((res, rej) => {
+          guitarSamplerRef.current = new Tone.Sampler({
+            urls: GUITAR_MAP, baseUrl: GUITAR_URL, release: 3.0,
+            onload: res, onerror: rej,
+          }).connect(guitarRev);
+        });
+        guitarSamplerRef.current.volume.value = (pianoVol / 100) * 20 - 20;
+        guitarLoadedRef.current = true;
+      }
+
       // Vider la file Transport avant de tout scheduler
       Tone.Transport.cancel();
 
@@ -608,8 +874,11 @@ export default function AccompagnementPage() {
             setTimeout(() => { if (playIdRef.current === playId) setCurrentFlat(val.flatIdx!); }, ms);
           }
           if (val.notes) {
+            const chordSampler = instrumentRef.current === 'guitar'
+              ? guitarSamplerRef.current
+              : samplerRef.current;
             val.notes.forEach((note, i) =>
-              samplerRef.current.triggerAttackRelease(note, val.dur, time + i * 0.015, val.vel)
+              chordSampler.triggerAttackRelease(note, val.dur, time + i * 0.025, val.vel)
             );
           }
         },
@@ -658,6 +927,7 @@ export default function AccompagnementPage() {
   function changePianoVol(v: number) {
     setPianoVol(v);
     if (samplerRef.current) samplerRef.current.volume.value = (v / 100) * 20 - 20;
+    if (guitarSamplerRef.current) guitarSamplerRef.current.volume.value = (v / 100) * 20 - 20;
   }
 
   function changeBassVol(v: number) {
@@ -680,8 +950,9 @@ export default function AccompagnementPage() {
 
   // ── Chord editing ───────────────────────────────────────────────────────────
   function openEdit(barIdx: number, chordIdx: number) {
-    if (status === 'playing' || status === 'counting') return;
     const c = bars[barIdx][chordIdx];
+    setViewChord(c);
+    if (status === 'playing' || status === 'counting') return;
     setEditRoot(c.rootIdx); setEditType(c.type);
     setEditCell({ barIdx, chordIdx });
   }
@@ -692,6 +963,7 @@ export default function AccompagnementPage() {
     setBars(prev => prev.map((bar, bi) =>
       bi !== editCell.barIdx ? bar : bar.map((c, ci) => ci !== editCell.chordIdx ? c : newChord)
     ));
+    setViewChord(newChord);
     setEditCell(null);
   }
 
@@ -849,8 +1121,30 @@ export default function AccompagnementPage() {
           <div className="border-t border-gray-700 pt-3 space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
               <p className="text-[10px] text-gray-500 uppercase tracking-wider w-full">Mixeur</p>
+              {/* Instrument switch */}
+              <div className="flex items-center gap-1 w-full mb-1">
+                <span className="text-[10px] text-gray-400 shrink-0 w-16">Accord</span>
+                <button
+                  onClick={() => { if (status === 'idle') { setInstrument('piano'); } }}
+                  className={`px-3 py-1 rounded-l-lg text-[10px] font-bold border transition-all ${
+                    instrument === 'piano'
+                      ? 'bg-amber-700 border-amber-500 text-white'
+                      : 'bg-gray-700 border-gray-600 text-gray-400 hover:text-white'
+                  }`}>
+                  🎹 Piano
+                </button>
+                <button
+                  onClick={() => { if (status === 'idle') { setInstrument('guitar'); } }}
+                  className={`px-3 py-1 rounded-r-lg text-[10px] font-bold border transition-all ${
+                    instrument === 'guitar'
+                      ? 'bg-green-700 border-green-500 text-white'
+                      : 'bg-gray-700 border-gray-600 text-gray-400 hover:text-white'
+                  }`}>
+                  🎸 Guitare jazz
+                </button>
+              </div>
               {[
-                { label: '🎹 Piano',  val: pianoVol, fn: changePianoVol, color: 'accent-amber-500' },
+                { label: instrument === 'guitar' ? '🎸 Guitare' : '🎹 Piano', val: pianoVol, fn: changePianoVol, color: 'accent-amber-500' },
                 { label: '🎸 Basse',  val: bassVol,  fn: changeBassVol,  color: 'accent-blue-500'  },
               ].map(({ label, val, fn, color }) => (
                 <div key={label} className="flex items-center gap-2 flex-1 min-w-[140px]">
@@ -916,12 +1210,11 @@ export default function AccompagnementPage() {
                       const isEditing = editCell?.barIdx === barIdx && editCell.chordIdx === ci;
                       return (
                         <button key={ci} onClick={() => openEdit(barIdx, ci)}
-                          className={`w-full text-left text-[10px] font-bold px-1 py-0.5 rounded border transition-all ${
+                          className={`w-full text-left text-[10px] font-bold px-1 py-0.5 rounded border transition-all cursor-pointer ${
                             isEditing ? 'border-orange-400 bg-orange-900/40 text-orange-200' :
                             isActive  ? COL_ACTIVE[chord.type] :
-                            canEdit   ? 'border-gray-700 hover:border-gray-500 ' + (COL_IDLE[chord.type] ?? 'text-gray-400') :
-                                        'bg-transparent border-transparent ' + (COL_IDLE[chord.type] ?? 'text-gray-400')
-                          } ${canEdit ? 'cursor-pointer' : 'cursor-default'}`}>
+                            'border-gray-700 hover:border-gray-500 ' + (COL_IDLE[chord.type] ?? 'text-gray-400')
+                          }`}>
                           {chord.name}
                           {bar.length > 1 && <span className="text-[7px] opacity-40 ml-0.5">{chord.beats}t</span>}
                         </button>
@@ -1055,71 +1348,98 @@ export default function AccompagnementPage() {
 
       </div>
 
-      {/* ── Edit panel — sticky bottom ─────────────────────────────────────── */}
-      {editCell && (
-        <div className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-700 p-4 z-50 shadow-2xl">
-          <div className="max-w-3xl mx-auto space-y-3">
-            {/* Header row */}
-            <div className="flex items-center gap-3 flex-wrap">
-              <p className="text-sm font-semibold text-white">
-                Mesure {editCell.barIdx + 1}
-                <span className={`ml-2 text-xs px-2 py-0.5 rounded border ${COL_ACTIVE[editType] ?? ''}`}>
-                  {NOTES[editRoot]}{TYPE_SYM[editType]}
+      {/* ── Chord panel — right drawer ─────────────────────────────────────── */}
+      {viewChord && (() => {
+        const vc = viewChord;
+        const shapes = (CHORD_SHAPES[vc.type] ?? CHORD_SHAPES.Maj7).map(s => ({
+          ...s, frets: transposeShape(s.frets, vc.rootIdx),
+        }));
+        const arpDots = getArpDots(vc.rootIdx, vc.type);
+        return (
+          <>
+            {/* Backdrop (mobile) */}
+            <div className="fixed inset-0 bg-black/40 z-40" onClick={() => { setViewChord(null); setEditCell(null); }} />
+
+            {/* Right panel */}
+            <div className="fixed right-0 top-0 bottom-0 z-50 w-full sm:w-80 bg-gray-950 border-l border-gray-700 shadow-2xl flex flex-col overflow-hidden">
+
+              {/* Header */}
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-800 shrink-0 flex-wrap">
+                <span className={`text-sm font-bold px-2 py-0.5 rounded border ${COL_ACTIVE[vc.type] ?? 'text-white border-gray-600'}`}>
+                  {vc.name}
                 </span>
-              </p>
+                {editCell && (
+                  <>
+                    <span className="text-xs text-gray-500">mes. {editCell.barIdx + 1}</span>
+                    {bars[editCell.barIdx].length === 1 ? (
+                      <button onClick={() => splitBar(editCell.barIdx)}
+                        className="px-2 py-0.5 rounded text-xs font-bold bg-gray-700 hover:bg-blue-700 text-gray-300 hover:text-white border border-gray-600 transition-all">÷2</button>
+                    ) : (
+                      <button onClick={() => mergeBar(editCell.barIdx)}
+                        className="px-2 py-0.5 rounded text-xs font-bold bg-gray-700 hover:bg-red-800 text-gray-300 hover:text-white border border-gray-600 transition-all">⊕</button>
+                    )}
+                  </>
+                )}
+                <button onClick={() => { setViewChord(null); setEditCell(null); }}
+                  className="ml-auto text-gray-400 hover:text-white text-xl leading-none">✕</button>
+              </div>
 
-              {/* Split / Merge */}
-              {bars[editCell.barIdx].length === 1 ? (
-                <button onClick={() => splitBar(editCell.barIdx)}
-                  title="Diviser la mesure en 2 accords (2+2 temps)"
-                  className="px-3 py-1 rounded-lg text-xs font-bold bg-gray-700 hover:bg-blue-700 text-gray-300 hover:text-white border border-gray-600 transition-all">
-                  ÷2 Diviser
-                </button>
-              ) : (
-                <button onClick={() => mergeBar(editCell.barIdx)}
-                  title="Fusionner en 1 accord (4 temps)"
-                  className="px-3 py-1 rounded-lg text-xs font-bold bg-gray-700 hover:bg-red-800 text-gray-300 hover:text-white border border-gray-600 transition-all">
-                  ⊕ Fusionner
-                </button>
-              )}
+              {/* Scrollable content */}
+              <div className="flex-1 overflow-y-auto px-4 py-3 space-y-5">
 
-              <button onClick={() => setEditCell(null)} className="ml-auto text-gray-400 hover:text-white text-lg leading-none">✕</button>
+                {/* Voicings */}
+                <div>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Voicings jazz</p>
+                  <div className="space-y-3">
+                    {shapes.map((s, i) => <ChordDiagram key={i} frets={s.frets} label={s.label} />)}
+                  </div>
+                </div>
+
+                {/* Arpège */}
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wider">Arpège — 5 positions</p>
+                    <span className="flex items-center gap-1 text-[9px] text-gray-600">
+                      <span className="w-2 h-2 rounded-full bg-orange-500 inline-block"/>root
+                      <span className="w-2 h-2 rounded-full bg-blue-500 inline-block ml-1"/>notes
+                    </span>
+                  </div>
+                  <div className="space-y-3">
+                    {ARP_WINS.map((w, i) => <ArpDiagram key={i} dots={arpDots} min={w.min} max={w.max} label={w.label} />)}
+                  </div>
+                </div>
+
+                {/* Edit controls — only when stopped */}
+                {editCell && (
+                  <div className="border-t border-gray-800 pt-3 space-y-2">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wider">Modifier l'accord</p>
+                    <div className="flex gap-1 flex-wrap">
+                      {NOTES.map((n, i) => (
+                        <button key={i} onClick={() => setEditRoot(i)}
+                          className={`w-9 h-9 rounded-lg text-xs font-bold transition-all border ${
+                            editRoot === i ? 'bg-orange-500 border-orange-400 text-white scale-110' : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700'
+                          }`}>{n}</button>
+                      ))}
+                    </div>
+                    <div className="flex gap-1.5 flex-wrap items-center">
+                      {TYPES.map(t => (
+                        <button key={t} onClick={() => setEditType(t)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all border ${
+                            editType === t ? (COL_ACTIVE[t] ?? 'bg-orange-600 border-orange-400 text-white') + ' scale-105' : 'bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700'
+                          }`}>{NOTES[editRoot]}{TYPE_SYM[t]}</button>
+                      ))}
+                    </div>
+                    <button onClick={applyEdit}
+                      className="w-full py-2 rounded-xl bg-orange-500 hover:bg-orange-400 text-white font-bold text-sm transition-colors">
+                      Appliquer
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
-
-            {/* Root selector */}
-            <div className="flex gap-1 flex-wrap">
-              {NOTES.map((n, i) => (
-                <button key={i} onClick={() => setEditRoot(i)}
-                  className={`w-9 h-9 rounded-lg text-xs font-bold transition-all border ${
-                    editRoot === i
-                      ? 'bg-orange-500 border-orange-400 text-white scale-110'
-                      : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700'
-                  }`}>
-                  {n}
-                </button>
-              ))}
-            </div>
-
-            {/* Type selector + Apply */}
-            <div className="flex gap-1.5 flex-wrap items-center">
-              {TYPES.map(t => (
-                <button key={t} onClick={() => setEditType(t)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
-                    editType === t
-                      ? (COL_ACTIVE[t] ?? 'bg-orange-600 border-orange-400 text-white') + ' scale-105'
-                      : 'bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700'
-                  }`}>
-                  {NOTES[editRoot]}{TYPE_SYM[t]}
-                </button>
-              ))}
-              <button onClick={applyEdit}
-                className="ml-auto px-5 py-2 rounded-xl bg-orange-500 hover:bg-orange-400 text-white font-bold text-sm transition-colors">
-                Appliquer
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </>
+        );
+      })()}
     </main>
   );
 }
