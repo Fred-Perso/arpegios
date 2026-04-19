@@ -445,7 +445,7 @@ export default function AccompagnementPage() {
   function buildDrums(Tone: any, vol: number, enabled: boolean) {
     disposeDrums();
 
-    // Appliquer le swing sur les croches
+    Tone.Transport.cancel();
     Tone.Transport.swing = DRUM_SWING;
     Tone.Transport.swingSubdivision = '8n';
 
@@ -515,6 +515,7 @@ export default function AccompagnementPage() {
       partRef.current?.stop(0);
       drumKitRef.current?.seqs?.forEach((s: any) => s.stop(0));
       Tone.Transport.stop();
+      Tone.Transport.cancel();
       Tone.Transport.position = '0:0:0';
       setStatus('idle'); setCurrentFlat(null); setCountBeat(null);
       return;
