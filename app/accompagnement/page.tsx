@@ -30,10 +30,9 @@ const SAMPLE_MAP: Record<string, string> = {
 const BASS_URL = 'https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/acoustic_bass-mp3/';
 
 const BASS_MAP: Record<string, string> = {
-  'A#0':'As0.mp3', 'C#1':'Cs1.mp3', 'E1':'E1.mp3',  'G1':'G1.mp3',
-  'A#1':'As1.mp3', 'C#2':'Cs2.mp3', 'E2':'E2.mp3',  'G2':'G2.mp3',
-  'A#2':'As2.mp3', 'C#3':'Cs3.mp3', 'E3':'E3.mp3',  'G3':'G3.mp3',
-  'A#3':'As3.mp3',
+  'E1':'E1.mp3', 'G1':'G1.mp3',
+  'E2':'E2.mp3', 'G2':'G2.mp3',
+  'E3':'E3.mp3', 'G3':'G3.mp3',
 };
 
 // ─── Music helpers ───────────────────────────────────────────────────────────
@@ -454,8 +453,8 @@ export default function AccompagnementPage() {
     const warmth = new Tone.Distortion({ distortion: 0.03, wet: 0.10 }).connect(bus);
     const comp   = new Tone.Compressor({ threshold: -18, ratio: 4, attack: 0.003, release: 0.12 }).connect(warmth);
 
-    // Ride — reverb dédiée pour l'air + harmoniques riches
-    const rideRev = new Tone.Reverb({ decay: 2.5, wet: 0.35 }).connect(comp);
+    // Ride — Freeverb (algorithmique = pas d'init async) pour éviter le crash timing
+    const rideRev = new Tone.Freeverb({ roomSize: 0.75, dampening: 3500, wet: 0.30 }).connect(comp);
     const ride = new Tone.MetalSynth({
       frequency: 500, harmonicity: 5.1, modulationIndex: 64,
       envelope: { attack: 0.001, decay: 1.5, release: 3.0 }, resonance: 5500, octaves: 2.2,
