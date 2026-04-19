@@ -436,7 +436,7 @@ export default function AccompagnementPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     k.seqs?.forEach((s: any) => { try { s.stop(0); s.dispose(); } catch {} });
     try { k.bassPart?.stop(0); k.bassPart?.dispose(); } catch {}
-    ['ride','hihat','snareBody','snareWire','snareWireFilter','warmth','comp','bus'].forEach(x => {
+    ['ride','rideRev','hihat','snareBody','snareWire','snareWireFilter','warmth','comp','bus'].forEach(x => {
       try { k[x]?.dispose(); } catch {}
     });
     drumKitRef.current = null;
@@ -454,12 +454,13 @@ export default function AccompagnementPage() {
     const warmth = new Tone.Distortion({ distortion: 0.03, wet: 0.10 }).connect(bus);
     const comp   = new Tone.Compressor({ threshold: -18, ratio: 4, attack: 0.003, release: 0.12 }).connect(warmth);
 
-    // Ride — plus présent, harmoniques riches
+    // Ride — reverb dédiée pour l'air + harmoniques riches
+    const rideRev = new Tone.Reverb({ decay: 2.5, wet: 0.35 }).connect(comp);
     const ride = new Tone.MetalSynth({
-      frequency: 450, harmonicity: 5.1, modulationIndex: 48,
-      envelope: { attack: 0.001, decay: 1.2, release: 2.5 }, resonance: 4800, octaves: 2.0,
-    }).connect(comp);
-    ride.volume.value = 0;
+      frequency: 500, harmonicity: 5.1, modulationIndex: 64,
+      envelope: { attack: 0.001, decay: 1.5, release: 3.0 }, resonance: 5500, octaves: 2.2,
+    }).connect(rideRev);
+    ride.volume.value = 5;
 
     // Hi-hat (temps 2 & 4)
     const hihat = new Tone.MetalSynth({
@@ -502,7 +503,7 @@ export default function AccompagnementPage() {
       mkSeq(DRUM_PAT.hihat, (t,sym) => hihat.triggerAttackRelease('16n', t, DRUM_VEL[sym])),
       mkSeq(DRUM_PAT.snare, (t,sym) => snareHit(t, DRUM_VEL[sym])),
     ];
-    drumKitRef.current = { ride, hihat, snareBody, snareWire, snareWireFilter, rideHit, warmth, comp, bus, seqs };
+    drumKitRef.current = { ride, rideRev, hihat, snareBody, snareWire, snareWireFilter, rideHit, warmth, comp, bus, seqs };
   }
 
   // ── Play / Stop ─────────────────────────────────────────────────────────────
