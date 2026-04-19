@@ -483,39 +483,38 @@ export default function AccompagnementPage() {
     drumKitRef.current = { ride, rideRev, hihat, snareBody, snareWire, snareWireFilter, rideHit, snareHit, warmth, comp, bus };
   }
 
-  // Tone.Part pour les drums — même stratégie que piano/basse, swing calculé en ticks
+  // Drum Part — temps "0:beat:2" (croche droite), swing ajouté dans le callback
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function buildDrumPart(Tone: any, kit: any): any {
-    const ppq   = Tone.Transport.PPQ as number; // ticks par noire (192 par défaut)
-    const swing = Math.round(DRUM_SWING * ppq);  // ticks pour la croche swinguée
+  function buildDrumPart(Tone: any, bpmVal: number, kit: any): any {
+    const swingLag = (DRUM_SWING - 0.5) * (60 / bpmVal); // décalage swing en secondes
 
-    type DE = { time: string; hit: string; vel: number };
+    type DE = { time: string; hit: string; vel: number; isUp: boolean };
     const events: DE[] = [];
 
     for (let step = 0; step < 8; step++) {
       const beat  = Math.floor(step / 2);
       const isUp  = step % 2 === 1;
-      const ticks = beat * ppq + (isUp ? swing : 0);
-      const time  = `${ticks}i`;
+      const time  = isUp ? `0:${beat}:2` : `0:${beat}:0`;
 
       const r: string = DRUM_PAT.ride[step];
-      if (r !== '.') events.push({ time, hit: 'ride',  vel: DRUM_VEL[r] });
+      if (r !== '.') events.push({ time, hit: 'ride',  vel: DRUM_VEL[r], isUp });
       const h: string = DRUM_PAT.hihat[step];
-      if (h !== '.') events.push({ time, hit: 'hihat', vel: DRUM_VEL[h] });
+      if (h !== '.') events.push({ time, hit: 'hihat', vel: DRUM_VEL[h], isUp });
       const s: string = DRUM_PAT.snare[step];
-      if (s !== '.') events.push({ time, hit: 'snare', vel: DRUM_VEL[s] });
+      if (s !== '.') events.push({ time, hit: 'snare', vel: DRUM_VEL[s], isUp });
     }
 
     const part = new (Tone.Part as any)(
       (time: number, val: DE) => {
-        if (val.hit === 'ride')  kit.rideHit(time, val.vel);
-        if (val.hit === 'hihat') kit.hihat.triggerAttackRelease('16n', time, val.vel);
-        if (val.hit === 'snare') kit.snareHit(time, val.vel);
+        const t = val.isUp ? time + swingLag : time;
+        if (val.hit === 'ride')  kit.rideHit(t, val.vel);
+        if (val.hit === 'hihat') kit.hihat.triggerAttackRelease('16n', t, val.vel);
+        if (val.hit === 'snare') kit.snareHit(t, val.vel);
       },
       events,
     );
     part.loop    = true;
-    part.loopEnd = `${4 * ppq}i`; // 1 mesure = 4 noires en ticks
+    part.loopEnd = '1:0:0'; // 1 mesure
     part.start(0);
     return part;
   }
@@ -622,7 +621,7 @@ export default function AccompagnementPage() {
 
       // Drum kit (instruments) + drum Part + walking bass
       buildDrums(Tone, drumVol, drumOn);
-      const drumPart = buildDrumPart(Tone, drumKitRef.current);
+      const drumPart = buildDrumPart(Tone, bpm, drumKitRef.current);
       drumKitRef.current.drumPart = drumPart;
       const { bassPart } = buildWalkingBass(Tone, events, totalBeats, bassSamplerRef.current);
       drumKitRef.current.bassPart = bassPart;
