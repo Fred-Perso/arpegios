@@ -58,11 +58,11 @@ function buildChord(rootIdx: number, type: string, beats = 4): Chord {
 
 // ─── Drum pattern — 8 croches swinguées (swing 0.55) ─────────────────────────
 // R=ride fort  r=ride léger  H=hihat  k=kick  s=snare léger  S=snare fort  .=silence
-const DRUM_SWING = 0.55;
+const DRUM_SWING = 0.667; // ratio 2:1 triolet (noire-croche)
 const DRUM_PAT = {
-  ride:  ['R', '.', 'R', 'R', 'R', '.', 'R', 'R'],
-  hihat: ['.', '.', 'H', '.', '.', '.', 'H', '.'],
-  snare: ['.', '.', '.', '.', '.', 'S', '.', '.'],
+  ride:  ['r', '.', '.', '.', 'r', '.', '.', '.'],
+  hihat: ['.', '.', '.', '.', '.', '.', '.', '.'],
+  snare: ['s', '.', 's', '.', 's', '.', 's', 's'],
 } as const;
 const DRUM_VEL: Record<string, number> = {
   R: 0.95, r: 0.55, H: 0.88, s: 0.44, S: 0.86,
