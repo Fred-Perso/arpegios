@@ -609,15 +609,21 @@ export default function AccompagnementPage() {
       const { bassPart } = buildWalkingBass(Tone, events, totalBeats, bassSamplerRef.current);
       drumKitRef.current.bassPart = bassPart;
 
-      // Count-in: 4 ride clicks then start
+      // Count-in: synth click dédié (indépendant du drum kit pour éviter les conflits de scheduling)
       const beatDur = 60 / bpm;
       setStatus('counting');
+      const clicker = new Tone.Synth({
+        oscillator: { type: 'triangle' },
+        envelope: { attack: 0.001, decay: 0.06, sustain: 0, release: 0.01 },
+      }).toDestination();
+      clicker.volume.value = -8;
       for (let i = 0; i < 4; i++) {
-        const t = Tone.now() + 0.05 + i * beatDur;
-        drumKitRef.current.rideHit(t, i === 0 ? 1.0 : 0.75);
+        const t = Tone.now() + 0.10 + i * beatDur;
+        clicker.triggerAttack(i === 0 ? 'C5' : 'G4', t, i === 0 ? 0.9 : 0.6);
         setTimeout(() => setCountBeat(4 - i), (i * beatDur) * 1000);
       }
-      const startIn = 4 * beatDur + 0.05;
+      const startIn = 4 * beatDur + 0.10;
+      setTimeout(() => clicker.dispose(), (startIn + 0.5) * 1000);
       Tone.Transport.bpm.value = bpm;
       Tone.Transport.start(`+${startIn}`);
       setTimeout(() => { setCountBeat(null); setStatus('playing'); }, startIn * 1000);
