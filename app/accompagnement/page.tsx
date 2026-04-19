@@ -482,7 +482,9 @@ export default function AccompagnementPage() {
     }).connect(snareWireFilter);
     snareWire.volume.value = -12;
 
-    const rideHit  = (t: number, v: number) => ride.triggerAttackRelease('8t', t, v);
+    // triggerAttack seul : la cymbale décroît naturellement, pas de release explicite
+    // triggerAttackRelease sur un MetalSynth à long decay cause "time >= last scheduled"
+    const rideHit  = (t: number, v: number) => ride.triggerAttack(t, v);
     const snareHit = (t: number, v: number) => {
       if (v > 0.50) snareBody.triggerAttackRelease('C3', '32n', t, v * 0.8);
       snareWire.triggerAttackRelease('32n', t, v);
