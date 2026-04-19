@@ -60,7 +60,7 @@ function buildChord(rootIdx: number, type: string, beats = 4): Chord {
 // R=ride fort  r=ride léger  H=hihat  k=kick  s=snare léger  S=snare fort  .=silence
 const DRUM_SWING = 0.55;
 const DRUM_PAT = {
-  ride:  ['R', 'r', 'r', 'R', 'r', 'r', 'R', 'r'],
+  ride:  ['R', 'r', 'R', 'r', 'R', 'r', 'R', 'r'],
   hihat: ['.', '.', 'H', '.', '.', '.', 'H', '.'],
   snare: ['.', '.', '.', 's', '.', 'S', '.', '.'],
 } as const;
