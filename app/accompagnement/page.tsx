@@ -61,13 +61,12 @@ function buildChord(rootIdx: number, type: string, beats = 4): Chord {
 // R=ride fort  r=ride léger  H=hihat  k=kick  s=snare léger  S=snare fort  .=silence
 const DRUM_SWING = 0.55;
 const DRUM_PAT = {
-  ride:  ['R', '.', 'r', 'R', '.', 'r', 'R', '.'],
+  ride:  ['R', 'r', 'r', 'R', 'r', 'r', 'R', 'r'],
   hihat: ['.', '.', 'H', '.', '.', '.', 'H', '.'],
-  kick:  ['k', '.', 'k', '.', 'k', '.', 'k', '.'],
   snare: ['.', '.', '.', 's', '.', 'S', '.', '.'],
 } as const;
 const DRUM_VEL: Record<string, number> = {
-  R: 0.90, r: 0.42, H: 0.88, k: 0.72, s: 0.44, S: 0.86,
+  R: 0.95, r: 0.55, H: 0.88, s: 0.44, S: 0.86,
 };
 
 // ─── Initial chart: Fly Me to the Moon (Bart Howard) — 32 mesures ────────────
@@ -437,7 +436,7 @@ export default function AccompagnementPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     k.seqs?.forEach((s: any) => { try { s.stop(0); s.dispose(); } catch {} });
     try { k.bassPart?.stop(0); k.bassPart?.dispose(); } catch {}
-    ['ride','hihat','kick','snareBody','snareWire','snareWireFilter','warmth','comp','bus'].forEach(x => {
+    ['ride','hihat','snareBody','snareWire','snareWireFilter','warmth','comp','bus'].forEach(x => {
       try { k[x]?.dispose(); } catch {}
     });
     drumKitRef.current = null;
@@ -455,12 +454,12 @@ export default function AccompagnementPage() {
     const warmth = new Tone.Distortion({ distortion: 0.03, wet: 0.10 }).connect(bus);
     const comp   = new Tone.Compressor({ threshold: -18, ratio: 4, attack: 0.003, release: 0.12 }).connect(warmth);
 
-    // Ride
+    // Ride — plus présent, harmoniques riches
     const ride = new Tone.MetalSynth({
-      frequency: 420, harmonicity: 5.1, modulationIndex: 40,
-      envelope: { attack: 0.001, decay: 0.9, release: 2.0 }, resonance: 4200, octaves: 1.8,
+      frequency: 450, harmonicity: 5.1, modulationIndex: 48,
+      envelope: { attack: 0.001, decay: 1.2, release: 2.5 }, resonance: 4800, octaves: 2.0,
     }).connect(comp);
-    ride.volume.value = -4;
+    ride.volume.value = 0;
 
     // Hi-hat (temps 2 & 4)
     const hihat = new Tone.MetalSynth({
@@ -468,13 +467,6 @@ export default function AccompagnementPage() {
       envelope: { attack: 0.001, decay: 0.05, release: 0.02 }, resonance: 9000, octaves: 1.2,
     }).connect(comp);
     hihat.volume.value = -14;
-
-    // Kick
-    const kick = new Tone.MembraneSynth({
-      pitchDecay: 0.06, octaves: 7,
-      envelope: { attack: 0.001, decay: 0.35, sustain: 0, release: 0.14 },
-    }).connect(comp);
-    kick.volume.value = -2;
 
     // Caisse claire — corps + fils
     const snareBody = new Tone.MembraneSynth({
@@ -508,10 +500,9 @@ export default function AccompagnementPage() {
     const seqs = [
       mkSeq(DRUM_PAT.ride,  (t,sym) => rideHit(t, DRUM_VEL[sym])),
       mkSeq(DRUM_PAT.hihat, (t,sym) => hihat.triggerAttackRelease('16n', t, DRUM_VEL[sym])),
-      mkSeq(DRUM_PAT.kick,  (t,sym) => kick.triggerAttackRelease('C1', '8n', t, DRUM_VEL[sym])),
       mkSeq(DRUM_PAT.snare, (t,sym) => snareHit(t, DRUM_VEL[sym])),
     ];
-    drumKitRef.current = { ride, hihat, kick, snareBody, snareWire, snareWireFilter, rideHit, warmth, comp, bus, seqs };
+    drumKitRef.current = { ride, hihat, snareBody, snareWire, snareWireFilter, rideHit, warmth, comp, bus, seqs };
   }
 
   // ── Play / Stop ─────────────────────────────────────────────────────────────
