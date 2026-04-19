@@ -202,7 +202,14 @@ function ArpDiagram({ dots, min, max, label }: { dots:{s:number;f:number;isRoot:
 }
 
 // ─── Music helpers ───────────────────────────────────────────────────────────
-const NOTES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'] as const;
+const NOTES      = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'] as const;
+const NOTES_FLAT = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'] as const;
+function noteLabel(rootIdx: number, flats: boolean) {
+  return flats ? NOTES_FLAT[rootIdx] : NOTES[rootIdx];
+}
+function chordDisplayName(rootIdx: number, type: string, flats: boolean) {
+  return `${noteLabel(rootIdx, flats)}${TYPE_SYM[type]}`;
+}
 const TYPES = ['Maj7','m7','Dom7','m7b5','mMaj7','dim7'] as const;
 const TYPE_SYM: Record<string, string> = {
   Maj7:'△7', m7:'m7', Dom7:'7', m7b5:'ø7', mMaj7:'m△7', dim7:'°7',
@@ -570,6 +577,7 @@ export default function AccompagnementPage() {
   const [transposeOffset, setTransposeOffset] = useState(0);
   const [instrument,      setInstrument]      = useState<'piano'|'guitar'>('piano');
   const [viewChord,       setViewChord]       = useState<Chord | null>(null);
+  const [useFlats,        setUseFlats]        = useState(false);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const samplerRef       = useRef<any>(null);
@@ -1110,9 +1118,19 @@ export default function AccompagnementPage() {
               <span className="font-mono font-bold w-10 text-right">{bpm}</span>
             </div>
 
+            <button onClick={() => setUseFlats(v => !v)}
+              title="Basculer entre dièses (#) et bémols (b)"
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all shrink-0 ${
+                useFlats
+                  ? 'bg-indigo-700 border-indigo-500 text-white'
+                  : 'bg-gray-700 border-gray-600 text-gray-300 hover:text-white'
+              }`}>
+              {useFlats ? '♭' : '♯'}
+            </button>
+
             {status === 'playing' && currentFlat !== null && (
               <span className="text-sm font-bold text-orange-400 animate-pulse ml-auto">
-                ● {bars[currentBar!].find((_, ci) => barFlatOffset[currentBar!] + ci === currentFlat)?.name}
+                ● {(() => { const c = bars[currentBar!].find((_, ci) => barFlatOffset[currentBar!] + ci === currentFlat); return c ? chordDisplayName(c.rootIdx, c.type, useFlats) : ''; })()}
               </span>
             )}
           </div>
@@ -1215,7 +1233,7 @@ export default function AccompagnementPage() {
                             isActive  ? COL_ACTIVE[chord.type] :
                             'border-gray-700 hover:border-gray-500 ' + (COL_IDLE[chord.type] ?? 'text-gray-400')
                           }`}>
-                          {chord.name}
+                          {chordDisplayName(chord.rootIdx, chord.type, useFlats)}
                           {bar.length > 1 && <span className="text-[7px] opacity-40 ml-0.5">{chord.beats}t</span>}
                         </button>
                       );
@@ -1285,7 +1303,7 @@ export default function AccompagnementPage() {
               {importPreview && (
                 <div className="bg-gray-900 rounded-lg p-3 text-xs space-y-1">
                   <p className="text-orange-300 font-bold">{importPreview.title}</p>
-                  <p className="text-gray-400">{importPreview.bars.length} mesures · {importPreview.bars.flat().map(c => c.name).join('  ')}</p>
+                  <p className="text-gray-400">{importPreview.bars.length} mesures · {importPreview.bars.flat().map(c => chordDisplayName(c.rootIdx, c.type, useFlats)).join('  ')}</p>
                   <button onClick={handleConfirmImport} disabled={status !== 'idle'}
                     className="mt-1 px-4 py-1.5 rounded-lg bg-green-700 hover:bg-green-600 text-white font-bold text-xs disabled:opacity-40 transition-colors">
                     ✓ Charger cette grille
@@ -1366,7 +1384,7 @@ export default function AccompagnementPage() {
               {/* Header */}
               <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-800 shrink-0 flex-wrap">
                 <span className={`text-sm font-bold px-2 py-0.5 rounded border ${COL_ACTIVE[vc.type] ?? 'text-white border-gray-600'}`}>
-                  {vc.name}
+                  {chordDisplayName(vc.rootIdx, vc.type, useFlats)}
                 </span>
                 {editCell && (
                   <>
@@ -1414,11 +1432,11 @@ export default function AccompagnementPage() {
                   <div className="border-t border-gray-800 pt-3 space-y-2">
                     <p className="text-[10px] text-gray-500 uppercase tracking-wider">Modifier l'accord</p>
                     <div className="flex gap-1 flex-wrap">
-                      {NOTES.map((n, i) => (
+                      {NOTES.map((_, i) => (
                         <button key={i} onClick={() => setEditRoot(i)}
                           className={`w-9 h-9 rounded-lg text-xs font-bold transition-all border ${
                             editRoot === i ? 'bg-orange-500 border-orange-400 text-white scale-110' : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700'
-                          }`}>{n}</button>
+                          }`}>{noteLabel(i, useFlats)}</button>
                       ))}
                     </div>
                     <div className="flex gap-1.5 flex-wrap items-center">
@@ -1426,7 +1444,7 @@ export default function AccompagnementPage() {
                         <button key={t} onClick={() => setEditType(t)}
                           className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all border ${
                             editType === t ? (COL_ACTIVE[t] ?? 'bg-orange-600 border-orange-400 text-white') + ' scale-105' : 'bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700'
-                          }`}>{NOTES[editRoot]}{TYPE_SYM[t]}</button>
+                          }`}>{noteLabel(editRoot, useFlats)}{TYPE_SYM[t]}</button>
                       ))}
                     </div>
                     <button onClick={applyEdit}

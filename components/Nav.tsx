@@ -39,6 +39,12 @@ export default function Nav() {
             Accompagnement
           </Link>
 
+          <Link href="/guitarpro"
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
+              ${path === '/guitarpro' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>
+            Guitar Pro
+          </Link>
+
           {/* Théorie dropdown */}
           <div className="relative">
             <button
