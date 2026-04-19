@@ -432,8 +432,7 @@ export default function AccompagnementPage() {
   function disposeDrums() {
     const k = drumKitRef.current;
     if (!k) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    k.seqs?.forEach((s: any) => { try { s.stop(0); s.dispose(); } catch {} });
+    try { k.drumPart?.stop(0); k.drumPart?.dispose(); } catch {}
     try { k.bassPart?.stop(0); k.bassPart?.dispose(); } catch {}
     ['ride','rideRev','hihat','snareBody','snareWire','snareWireFilter','warmth','comp','bus'].forEach(x => {
       try { k[x]?.dispose(); } catch {}
@@ -442,17 +441,13 @@ export default function AccompagnementPage() {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function buildDrums(Tone: any, vol: number, enabled: boolean) {
     disposeDrums();
-
-    Tone.Transport.swing = DRUM_SWING;
-    Tone.Transport.swingSubdivision = '8n';
-
     const bus    = new Tone.Gain(enabled ? vol / 100 : 0).toDestination();
     const warmth = new Tone.Distortion({ distortion: 0.03, wet: 0.10 }).connect(bus);
     const comp   = new Tone.Compressor({ threshold: -18, ratio: 4, attack: 0.003, release: 0.12 }).connect(warmth);
 
-    // Ride — Freeverb (algorithmique = pas d'init async) pour éviter le crash timing
     const rideRev = new Tone.Freeverb({ roomSize: 0.75, dampening: 3500, wet: 0.30 }).connect(comp);
     const ride = new Tone.MetalSynth({
       frequency: 500, harmonicity: 5.1, modulationIndex: 64,
@@ -460,14 +455,12 @@ export default function AccompagnementPage() {
     }).connect(rideRev);
     ride.volume.value = 5;
 
-    // Hi-hat (temps 2 & 4)
     const hihat = new Tone.MetalSynth({
       frequency: 1100, harmonicity: 5.1, modulationIndex: 16,
       envelope: { attack: 0.001, decay: 0.05, release: 0.02 }, resonance: 9000, octaves: 1.2,
     }).connect(comp);
     hihat.volume.value = -14;
 
-    // Caisse claire — corps + fils
     const snareBody = new Tone.MembraneSynth({
       pitchDecay: 0.008, octaves: 3,
       envelope: { attack: 0.001, decay: 0.10, sustain: 0, release: 0.05 },
@@ -481,29 +474,50 @@ export default function AccompagnementPage() {
     }).connect(snareWireFilter);
     snareWire.volume.value = -12;
 
-    // triggerAttack seul : la cymbale décroît naturellement, pas de release explicite
-    // triggerAttackRelease sur un MetalSynth à long decay cause "time >= last scheduled"
     const rideHit  = (t: number, v: number) => ride.triggerAttack(t, v);
     const snareHit = (t: number, v: number) => {
       if (v > 0.50) snareBody.triggerAttackRelease('C3', '32n', t, v * 0.8);
       snareWire.triggerAttackRelease('32n', t, v);
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const mkSeq = (pat: readonly string[], hit: (t:number, sym:string)=>void): any => {
-      const s = new Tone.Sequence(
-        (time: number, sym: string) => { if (sym !== '.') hit(time, sym); },
-        [...pat], '8n'
-      );
-      s.loop = true; s.start(0); return s;
-    };
+    drumKitRef.current = { ride, rideRev, hihat, snareBody, snareWire, snareWireFilter, rideHit, snareHit, warmth, comp, bus };
+  }
 
-    const seqs = [
-      mkSeq(DRUM_PAT.ride,  (t,sym) => rideHit(t, DRUM_VEL[sym])),
-      mkSeq(DRUM_PAT.hihat, (t,sym) => hihat.triggerAttackRelease('16n', t, DRUM_VEL[sym])),
-      mkSeq(DRUM_PAT.snare, (t,sym) => snareHit(t, DRUM_VEL[sym])),
-    ];
-    drumKitRef.current = { ride, rideRev, hihat, snareBody, snareWire, snareWireFilter, rideHit, warmth, comp, bus, seqs };
+  // Tone.Part pour les drums — même stratégie que piano/basse, swing calculé en ticks
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function buildDrumPart(Tone: any, kit: any): any {
+    const ppq   = Tone.Transport.PPQ as number; // ticks par noire (192 par défaut)
+    const swing = Math.round(DRUM_SWING * ppq);  // ticks pour la croche swinguée
+
+    type DE = { time: string; hit: string; vel: number };
+    const events: DE[] = [];
+
+    for (let step = 0; step < 8; step++) {
+      const beat  = Math.floor(step / 2);
+      const isUp  = step % 2 === 1;
+      const ticks = beat * ppq + (isUp ? swing : 0);
+      const time  = `${ticks}i`;
+
+      const r: string = DRUM_PAT.ride[step];
+      if (r !== '.') events.push({ time, hit: 'ride',  vel: DRUM_VEL[r] });
+      const h: string = DRUM_PAT.hihat[step];
+      if (h !== '.') events.push({ time, hit: 'hihat', vel: DRUM_VEL[h] });
+      const s: string = DRUM_PAT.snare[step];
+      if (s !== '.') events.push({ time, hit: 'snare', vel: DRUM_VEL[s] });
+    }
+
+    const part = new (Tone.Part as any)(
+      (time: number, val: DE) => {
+        if (val.hit === 'ride')  kit.rideHit(time, val.vel);
+        if (val.hit === 'hihat') kit.hihat.triggerAttackRelease('16n', time, val.vel);
+        if (val.hit === 'snare') kit.snareHit(time, val.vel);
+      },
+      events,
+    );
+    part.loop    = true;
+    part.loopEnd = `${4 * ppq}i`; // 1 mesure = 4 noires en ticks
+    part.start(0);
+    return part;
   }
 
   // ── Play / Stop ─────────────────────────────────────────────────────────────
@@ -512,7 +526,6 @@ export default function AccompagnementPage() {
       const Tone = await import('tone');
       playIdRef.current++;
       partRef.current?.stop(0);
-      drumKitRef.current?.seqs?.forEach((s: any) => s.stop(0));
       Tone.Transport.stop();
       Tone.Transport.cancel();
       Tone.Transport.position = '0:0:0';
@@ -607,8 +620,10 @@ export default function AccompagnementPage() {
       partRef.current.loopEnd = bt(totalBeats);
       partRef.current.start(0);
 
-      // Drum kit + walking bass
+      // Drum kit (instruments) + drum Part + walking bass
       buildDrums(Tone, drumVol, drumOn);
+      const drumPart = buildDrumPart(Tone, drumKitRef.current);
+      drumKitRef.current.drumPart = drumPart;
       const { bassPart } = buildWalkingBass(Tone, events, totalBeats, bassSamplerRef.current);
       drumKitRef.current.bassPart = bassPart;
 
