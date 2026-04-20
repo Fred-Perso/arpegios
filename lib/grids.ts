@@ -1,8 +1,23 @@
 import {
   collection, addDoc, deleteDoc, doc,
-  onSnapshot, Timestamp,
+  onSnapshot, setDoc, Timestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
+
+export interface AdminConfig {
+  compPatterns: { active: boolean; voicing: string; vel: number }[][];
+  drumSteps: Record<string, boolean[]>;
+}
+
+export function subscribeAdminConfig(cb: (cfg: AdminConfig | null) => void) {
+  return onSnapshot(doc(db, 'config', 'admin'), snap => {
+    cb(snap.exists() ? (snap.data() as AdminConfig) : null);
+  });
+}
+
+export async function saveAdminConfig(cfg: AdminConfig): Promise<void> {
+  await setDoc(doc(db, 'config', 'admin'), cfg);
+}
 
 // Minimal chord representation stored in Firestore (name/notes are computed on load)
 export interface StoredChord {

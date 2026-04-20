@@ -5,8 +5,10 @@ import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import {
   subscribeGrids,
-  saveGrid  as saveGridToDb,
-  deleteGrid as deleteGridToDb,
+  saveGrid        as saveGridToDb,
+  deleteGrid      as deleteGridToDb,
+  subscribeAdminConfig,
+  saveAdminConfig,
   type GridDoc, type StoredChord,
 } from '@/lib/grids';
 
@@ -229,37 +231,7 @@ function buildChord(rootIdx: number, type: string, beats = 4): Chord {
   return { name:`${NOTES[rootIdx]}${TYPE_SYM[type]}`, notes, beats, type, rootIdx };
 }
 
-// ─── Drum pattern — 8 croches swinguées ──────────────────────────────────────
-// Ride      : R=fort(1.0)  r=léger(0.55)
-// Hihat ferm: H=fort(0.88) h=léger(0.55)
-// Hihat ouv : O=fort(0.90) o=léger(0.70)
-// Snare     : S=fort(0.86) s=léger(0.44)
-// Kick      : K=fort(0.85) k=léger(0.55)
-// Crash     : X=fort(0.80) x=léger(0.45)
-// China     : Z=fort(0.85) z=léger(0.50)  — son "trash" inversé
-// Splash    : P=fort(0.75) p=léger(0.40)  — crash court ~0.3s
-// silence   : .
-const DRUM_SWING = 0.680; // ratio 2:1 triolet (noire-croche)
-const DRUM_PAT = {
-  ride:        ['r', '.', 'r', 'r', 'r', '.', 'r', 'r'],
-  hihat:       ['.', '.', '.', '.', '.', '.', '.', '.'],
-  snareSweep:  ['s', 's', 's', 's', 's', 's', 's', 's'], // balayage continu (main gauche)
-  snareTap:    ['.', '.', 's', '.', '.', '.', 's', '.'], 
-  kick:        ['.', '.', '.', '.', '.', '.', '.', '.'],
-  crash:      ['.', '.', '.', '.', '.', '.', '.', '.'],
-  china:      ['.', '.', '.', '.', '.', '.', '.', '.'],
-  splash:     ['.', '.', '.', '.', '.', '.', '.', '.'],
-} as const;
-const DRUM_VEL: Record<string, number> = {
-  R: 1.00, r: 0.05,
-  H: 0.88, h: 0.55,
-  O: 0.90, o: 0.70,
-  S: 0.86, s: 0.22,
-  K: 0.85, k: 0.55,
-  X: 0.80, x: 0.45,
-  Z: 0.85, z: 0.50,
-  P: 0.75, p: 0.40,
-};
+const DRUM_SWING = 0.660; // ratio 2:1 triolet (noire-croche)
 
 // ─── Initial chart: Fly Me to the Moon (Bart Howard) — 32 mesures ────────────
 // Forme Intro–A–B–C  (4 × 8 mesures)
@@ -324,6 +296,33 @@ const COL_BTN: Record<string, string> = {
   Dom7:'bg-red-700 text-white',   m7b5:'bg-purple-700 text-white',
   mMaj7:'bg-teal-700 text-white', dim7:'bg-rose-700 text-white',
 };
+
+// ─── Admin config ─────────────────────────────────────────────────────────────
+type CompBeatCfg = { active: boolean; voicing: 'root'|'shell'|'full'; vel: number };
+const DEFAULT_COMP_CFG: CompBeatCfg[] = [
+  { active: false, voicing: 'shell', vel: 0.55 },
+  { active: true,  voicing: 'shell', vel: 0.65 },
+  { active: false, voicing: 'full',  vel: 0.60 },
+  { active: true,  voicing: 'shell', vel: 0.50 },
+];
+type DrumVoiceKey = 'ride'|'hihat'|'snareSweep'|'snareTap'|'kick'|'crash'|'china'|'splash';
+const DRUM_VOICE_LABELS: Record<DrumVoiceKey, string> = {
+  ride:'Ride', hihat:'Hi-hat', snareSweep:'Caisse (balai)', snareTap:'Caisse (tap)',
+  kick:'Grosse caisse', crash:'Crash', china:'China', splash:'Splash',
+};
+const DRUM_VOICE_KEYS: DrumVoiceKey[] = ['ride','hihat','snareSweep','snareTap','kick','crash','china','splash'];
+function initDrumSteps(): Record<DrumVoiceKey, boolean[]> {
+  return {
+    ride:       [true, false, true, true, true, false, true, true],
+    hihat:      Array(8).fill(false),
+    snareSweep: Array(8).fill(true),
+    snareTap:   [false,false,true,false,false,false,true,false],
+    kick:       Array(8).fill(false),
+    crash:      Array(8).fill(false),
+    china:      Array(8).fill(false),
+    splash:     Array(8).fill(false),
+  };
+}
 
 // ─── Import parser ───────────────────────────────────────────────────────────
 /*
@@ -501,41 +500,6 @@ function buildWalkingBass(Tone: any, events: EvItem[], totalBeats: number, instr
   return { bassPart };
 }
 
-// ─── Jazz comp patterns (8 bars, then repeats) ───────────────────────────────
-// n = [root, 3rd, 5th, 7th]  |  beatOffset = position within the chord (0–3)
-type CompHit = { beatOffset: number; notes: string[]; dur: string; vel: number };
-
-function getCompHits(barIdx: number, n: string[]): CompHit[] {
-  switch (barIdx % 8) {
-    case 0: return [ // shell on beat 2 only
-      { beatOffset: 1, notes: [n[1], n[3]],       dur: '4n', vel: 0.63 },
-    ];
-    case 1: return [ // classic 2 + 4 (standard swing comp)
-      { beatOffset: 1, notes: [n[1], n[3]],       dur: '4n', vel: 0.65 },
-      { beatOffset: 3, notes: [n[1], n[2], n[3]], dur: '8n', vel: 0.50 },
-    ];
-    case 2: return [ // light beat 1 + shell beat 3
-      { beatOffset: 0, notes: [n[0], n[2]],       dur: '4n', vel: 0.42 },
-      { beatOffset: 2, notes: [n[1], n[3]],       dur: '4n', vel: 0.60 },
-    ];
-    case 3: return [ // single hit beat 3 — maximum air
-      { beatOffset: 2, notes: [n[1], n[2], n[3]], dur: '4n', vel: 0.58 },
-    ];
-    case 4: return [ // beats 1 + 3 — strong statement
-      { beatOffset: 0, notes: [n[1], n[3]],       dur: '4n', vel: 0.55 },
-      { beatOffset: 2, notes: [n[1], n[2], n[3]], dur: '4n', vel: 0.62 },
-    ];
-    case 5: return [ // anticipation — beat 4 only
-      { beatOffset: 3, notes: [n[0], n[1], n[3]], dur: '8n', vel: 0.52 },
-    ];
-    case 6: return [ // consecutive beats 2 + 3
-      { beatOffset: 1, notes: [n[1], n[3]],       dur: '8n', vel: 0.60 },
-      { beatOffset: 2, notes: [n[0], n[2], n[3]], dur: '4n', vel: 0.55 },
-    ];
-    case 7: return []; // complete silence — breathing room
-    default: return [];
-  }
-}
 
 // ─── Component ───────────────────────────────────────────────────────────────
 export default function AccompagnementPage() {
@@ -578,6 +542,13 @@ export default function AccompagnementPage() {
   const [instrument,      setInstrument]      = useState<'piano'|'guitar'>('piano');
   const [viewChord,       setViewChord]       = useState<Chord | null>(null);
   const [useFlats,        setUseFlats]        = useState(false);
+  const [adminOpen,        setAdminOpen]        = useState(false);
+  const [adminAuthed,      setAdminAuthed]      = useState(false);
+  const [adminPwd,         setAdminPwd]         = useState('');
+  const [adminSaving,      setAdminSaving]      = useState(false);
+  const [compPatterns,     setCompPatterns]     = useState<CompBeatCfg[][]>([DEFAULT_COMP_CFG.map(c => ({ ...c }))]);
+  const [activePatIdx,     setActivePatIdx]     = useState(0);
+  const [drumSteps,        setDrumSteps]        = useState<Record<DrumVoiceKey, boolean[]>>(initDrumSteps);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const samplerRef       = useRef<any>(null);
@@ -593,8 +564,24 @@ export default function AccompagnementPage() {
   const guitarLoadedRef  = useRef(false);
   const instrumentRef    = useRef<'piano'|'guitar'>('piano');
   const playIdRef        = useRef(0);
+  const compPatternsRef  = useRef<CompBeatCfg[][]>([DEFAULT_COMP_CFG.map(c => ({ ...c }))]);
+  const drumStepsRef     = useRef<Record<DrumVoiceKey, boolean[]>>(initDrumSteps());
 
-  useEffect(() => { instrumentRef.current = instrument; }, [instrument]);
+  useEffect(() => { instrumentRef.current  = instrument;    }, [instrument]);
+  useEffect(() => { compPatternsRef.current = compPatterns; }, [compPatterns]);
+  useEffect(() => { drumStepsRef.current    = drumSteps;    }, [drumSteps]);
+
+  // Firestore admin config — lecture en temps réel pour tous les visiteurs
+  useEffect(() => {
+    return subscribeAdminConfig(cfg => {
+      if (!cfg) return;
+      if (Array.isArray(cfg.compPatterns) && cfg.compPatterns.length)
+        setCompPatterns(cfg.compPatterns as typeof compPatterns);
+      if (cfg.drumSteps && typeof cfg.drumSteps === 'object')
+        setDrumSteps(cfg.drumSteps as typeof drumSteps);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Load localStorage grids on mount (fallback when Firebase unavailable)
   useEffect(() => {
@@ -726,55 +713,33 @@ export default function AccompagnementPage() {
     };
   }
 
-  // Drum Part — temps "0:beat:2" (croche droite), swing ajouté dans le callback
+  // Drum Part — lit drumStepsRef à chaque callback → changements en temps réel
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function buildDrumPart(Tone: any, bpmVal: number, kit: any): any {
-    const swingLag = (DRUM_SWING - 0.5) * (60 / bpmVal); // décalage swing en secondes
-
-    type DE = { time: string; hit: string; vel: number; isUp: boolean };
-    const events: DE[] = [];
-
-    for (let step = 0; step < 8; step++) {
-      const beat  = Math.floor(step / 2);
-      const isUp  = step % 2 === 1;
-      const time  = isUp ? `0:${beat}:2` : `0:${beat}:0`;
-
-      const vel = (tok: string) => Math.min(1, DRUM_VEL[tok] ?? 0);
-      const r: string = DRUM_PAT.ride[step];
-      if (r !== '.') events.push({ time, hit: 'ride',        vel: vel(r),  isUp });
-      const h: string = DRUM_PAT.hihat[step];
-      if (h !== '.') events.push({ time, hit: 'hihat',       vel: vel(h),  isUp });
-      const sw: string = DRUM_PAT.snareSweep[step];
-      if (sw !== '.') events.push({ time, hit: 'snareSweep', vel: vel(sw), isUp });
-      const st: string = DRUM_PAT.snareTap[step];
-      if (st !== '.') events.push({ time, hit: 'snareTap',   vel: vel(st), isUp });
-      const k: string = DRUM_PAT.kick[step];
-      if (k !== '.') events.push({ time, hit: 'kick',        vel: vel(k),  isUp });
-      const c: string = DRUM_PAT.crash[step];
-      if (c !== '.') events.push({ time, hit: 'crash',       vel: vel(c),  isUp });
-      const z: string = DRUM_PAT.china[step];
-      if (z !== '.') events.push({ time, hit: 'china',       vel: vel(z),  isUp });
-      const p: string = DRUM_PAT.splash[step];
-      if (p !== '.') events.push({ time, hit: 'splash',      vel: vel(p),  isUp });
-    }
-
+    const swingLag = (DRUM_SWING - 0.5) * (60 / bpmVal);
+    type DE = { time: string; step: number; isUp: boolean };
+    const events: DE[] = Array.from({ length: 8 }, (_, step) => {
+      const beat = Math.floor(step / 2);
+      const isUp = step % 2 === 1;
+      return { time: isUp ? `0:${beat}:2` : `0:${beat}:0`, step, isUp };
+    });
     const part = new (Tone.Part as any)(
       (time: number, val: DE) => {
-        if (val.vel <= 0) return;
+        const s = drumStepsRef.current;
         const t = val.isUp ? time + swingLag : time;
-        if (val.hit === 'ride')      kit.rideHit(t, val.vel);
-        if (val.hit === 'hihat')       kit.hihat.triggerAttackRelease(1100, '16n', t, val.vel);
-        if (val.hit === 'snareSweep') kit.snareWire.triggerAttackRelease('16n', t, val.vel * 0.6);
-        if (val.hit === 'snareTap')   kit.snareHit(t, val.vel);
-        if (val.hit === 'kick')      kit.kick.triggerAttackRelease('C1', '8n', t, val.vel);
-        if (val.hit === 'crash')     kit.crash.triggerAttackRelease(280, '1m', t, val.vel);
-        if (val.hit === 'china')     kit.china.triggerAttackRelease(220, '1m', t, val.vel);
-        if (val.hit === 'splash')    kit.splash.triggerAttackRelease(380, '4n', t, val.vel);
+        if (s.ride[val.step])       kit.rideHit(t, val.isUp ? 0.35 : 0.55);
+        if (s.hihat[val.step])      kit.hihat.triggerAttackRelease(1100, '16n', t, 0.55);
+        if (s.snareSweep[val.step]) kit.snareWire.triggerAttackRelease('16n', t, 0.14);
+        if (s.snareTap[val.step])   kit.snareHit(t, 0.22);
+        if (s.kick[val.step])       kit.kick.triggerAttackRelease('C1', '8n', t, 0.85);
+        if (s.crash[val.step])      kit.crash.triggerAttackRelease(280, '1m', t, 0.80);
+        if (s.china[val.step])      kit.china.triggerAttackRelease(220, '1m', t, 0.85);
+        if (s.splash[val.step])     kit.splash.triggerAttackRelease(380, '4n', t, 0.75);
       },
       events,
     );
     part.loop    = true;
-    part.loopEnd = '1:0:0'; // 1 mesure
+    part.loopEnd = '1:0:0';
     part.start(0);
     return part;
   }
@@ -855,23 +820,18 @@ export default function AccompagnementPage() {
       const playId = ++playIdRef.current;
       partRef.current?.dispose();
 
-      // Build comping events: shell voicing on beat 2, upper on beat 3, anticipation on beat 4
-      // Beat 1 stays free for the walking bass
-      type PV = { time: string; notes: string[] | null; dur: string; vel: number; flatIdx: number | null };
+      // Comp events: one event per beat per chord — callback reads compCfgRef at runtime
+      type PV = { time: string; notes: string[]; beatOffset: number; barIdx: number; flatIdx: number | null };
       const compEvents: PV[] = [];
       events.forEach(ev => {
-        const n = ev.chord.notes; // [root, 3rd/m3, 5th, 7th]
-        // Marker on beat 1 (chord highlight only, no notes)
-        compEvents.push({ time: bt(ev.beatStart), notes: null, dur: '', vel: 0, flatIdx: ev.flatIdx });
-
-        if (ev.chord.beats >= 4) {
-          // Pattern cycles every 4 bars
-          getCompHits(ev.barIdx, n).forEach(hit =>
-            compEvents.push({ time: bt(ev.beatStart + hit.beatOffset), notes: hit.notes, dur: hit.dur, vel: hit.vel, flatIdx: null })
-          );
-        } else {
-          // 2-beat chord: one hit on beat 1
-          compEvents.push({ time: bt(ev.beatStart), notes: n, dur: '2n', vel: 0.72, flatIdx: null });
+        for (let b = 0; b < ev.chord.beats; b++) {
+          compEvents.push({
+            time: bt(ev.beatStart + b),
+            notes: ev.chord.notes,
+            beatOffset: b,
+            barIdx: ev.barIdx,
+            flatIdx: b === 0 ? ev.flatIdx : null,
+          });
         }
       });
 
@@ -881,14 +841,19 @@ export default function AccompagnementPage() {
             const ms = Math.max(0, (time - Tone.now()) * 1000);
             setTimeout(() => { if (playIdRef.current === playId) setCurrentFlat(val.flatIdx!); }, ms);
           }
-          if (val.notes) {
-            const chordSampler = instrumentRef.current === 'guitar'
-              ? guitarSamplerRef.current
-              : samplerRef.current;
-            val.notes.forEach((note, i) =>
-              chordSampler.triggerAttackRelease(note, val.dur, time + i * 0.025, val.vel)
-            );
-          }
+          const patterns = compPatternsRef.current;
+          const cfg = patterns[val.barIdx % patterns.length]?.[val.beatOffset];
+          if (!cfg?.active) return;
+          const chordSampler = instrumentRef.current === 'guitar'
+            ? guitarSamplerRef.current
+            : samplerRef.current;
+          const n = val.notes;
+          const notesToPlay = cfg.voicing === 'root' ? [n[0]]
+            : cfg.voicing === 'shell' ? [n[1], n[3]]
+            : [n[1], n[2], n[3]];
+          notesToPlay.forEach((note, i) =>
+            chordSampler.triggerAttackRelease(note, '4n', time + i * 0.025, cfg.vel)
+          );
         },
         compEvents,
       );
@@ -975,6 +940,31 @@ export default function AccompagnementPage() {
     setEditCell(null);
   }
 
+  // ── Admin helpers ────────────────────────────────────────────────────────────
+  function toggleCompBeat(pi: number, bi: number) {
+    setCompPatterns(prev => prev.map((pat, p) => p !== pi ? pat :
+      pat.map((c, j) => j === bi ? { ...c, active: !c.active } : c)));
+  }
+  function setCompVoicing(pi: number, bi: number, v: CompBeatCfg['voicing']) {
+    setCompPatterns(prev => prev.map((pat, p) => p !== pi ? pat :
+      pat.map((c, j) => j === bi ? { ...c, voicing: v } : c)));
+  }
+  function setCompVel(pi: number, bi: number, v: number) {
+    setCompPatterns(prev => prev.map((pat, p) => p !== pi ? pat :
+      pat.map((c, j) => j === bi ? { ...c, vel: v } : c)));
+  }
+  function addCompPattern() {
+    setCompPatterns(prev => [...prev, DEFAULT_COMP_CFG.map(c => ({ ...c }))]);
+    setActivePatIdx(prev => prev + 1);
+  }
+  function removeCompPattern(pi: number) {
+    setCompPatterns(prev => prev.length <= 1 ? prev : prev.filter((_, i) => i !== pi));
+    setActivePatIdx(prev => Math.min(prev, compPatterns.length - 2));
+  }
+  function toggleDrumStep(voice: DrumVoiceKey, step: number) {
+    setDrumSteps(prev => ({ ...prev, [voice]: prev[voice].map((b, i) => i === step ? !b : b) }));
+  }
+
   // ── Bar structure ───────────────────────────────────────────────────────────
   function splitBar(barIdx: number) {
     setBars(prev => prev.map((bar, bi) => {
@@ -990,6 +980,7 @@ export default function AccompagnementPage() {
     ));
     setEditCell(null);
   }
+
 
   // ── Archive ─────────────────────────────────────────────────────────────────
   async function handleSave() {
@@ -1126,6 +1117,12 @@ export default function AccompagnementPage() {
                   : 'bg-gray-700 border-gray-600 text-gray-300 hover:text-white'
               }`}>
               {useFlats ? '♭' : '♯'}
+            </button>
+
+            <button onClick={() => setAdminOpen(v => !v)}
+              title="Admin"
+              className="px-2.5 py-1 rounded-lg text-xs font-bold border bg-gray-700 border-gray-600 text-gray-400 hover:text-white transition-all shrink-0">
+              ⚙
             </button>
 
             {status === 'playing' && currentFlat !== null && (
@@ -1365,6 +1362,151 @@ export default function AccompagnementPage() {
         </div>
 
       </div>
+
+      {/* ── Admin panel ───────────────────────────────────────────────────── */}
+      {adminOpen && (
+        <>
+          <div className="fixed inset-0 bg-black/60 z-40" onClick={() => setAdminOpen(false)} />
+          <div className="fixed right-0 top-0 bottom-0 z-50 w-full sm:w-[400px] bg-gray-950 border-l border-gray-700 shadow-2xl flex flex-col overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-800 shrink-0">
+              <span className="text-sm font-bold text-orange-400">⚙ Admin</span>
+              {adminAuthed && (
+                <button onClick={() => setAdminAuthed(false)}
+                  className="px-2 py-0.5 rounded text-[10px] bg-gray-800 text-gray-500 hover:text-white border border-gray-700 transition-colors">
+                  Verrouiller
+                </button>
+              )}
+              <button onClick={() => setAdminOpen(false)} className="ml-auto text-gray-400 hover:text-white text-xl leading-none">✕</button>
+            </div>
+
+            {!adminAuthed ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 gap-4">
+                <p className="text-sm text-gray-400">Mot de passe</p>
+                <input type="password" value={adminPwd} onChange={e => setAdminPwd(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { if (adminPwd === 'Bibelo1946') { setAdminAuthed(true); setAdminPwd(''); } else { setAdminPwd(''); } } }}
+                  placeholder="••••••••"
+                  className="w-48 bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-center text-white outline-none focus:border-orange-400" />
+                <button
+                  onClick={() => { if (adminPwd === 'Bibelo1946') { setAdminAuthed(true); setAdminPwd(''); } else { setAdminPwd(''); } }}
+                  className="px-6 py-2 rounded-xl bg-orange-500 hover:bg-orange-400 text-white font-bold text-sm transition-colors">
+                  Entrer
+                </button>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
+
+                {/* ── Comp ── */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wider">Comp — patterns (alternent par mesure)</p>
+                    <button onClick={addCompPattern}
+                      className="ml-auto px-2 py-0.5 rounded text-[10px] font-bold bg-orange-700 hover:bg-orange-600 text-white border border-orange-500 transition-colors">
+                      + Mesure
+                    </button>
+                  </div>
+
+                  {/* Tabs */}
+                  <div className="flex gap-1 mb-3 flex-wrap">
+                    {compPatterns.map((_, pi) => (
+                      <div key={pi} className="flex items-center">
+                        <button onClick={() => setActivePatIdx(pi)}
+                          className={`px-2.5 py-1 rounded-l text-[10px] font-bold border transition-all ${
+                            activePatIdx === pi ? 'bg-orange-700 border-orange-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white'
+                          }`}>Mes. {pi + 1}</button>
+                        {compPatterns.length > 1 && (
+                          <button onClick={() => removeCompPattern(pi)}
+                            className="px-1 py-1 rounded-r text-[10px] bg-gray-800 border border-l-0 border-gray-700 text-gray-600 hover:text-red-400 transition-colors">✕</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Active pattern beats */}
+                  {compPatterns[activePatIdx] && (
+                    <div className="space-y-2">
+                      {compPatterns[activePatIdx].map((cfg, bi) => (
+                        <div key={bi} className="flex items-center gap-2 flex-wrap">
+                          <button onClick={() => toggleCompBeat(activePatIdx, bi)}
+                            className={`w-7 h-7 rounded text-xs font-bold border shrink-0 transition-all ${
+                              cfg.active ? 'bg-orange-600 border-orange-400 text-white' : 'bg-gray-800 border-gray-600 text-gray-500 hover:border-gray-400'
+                            }`}>{bi + 1}</button>
+                          <span className="text-xs text-gray-500 w-14 shrink-0">Temps {bi + 1}</span>
+                          {cfg.active ? (
+                            <>
+                              <div className="flex gap-0.5">
+                                {(['root','shell','full'] as const).map(v => (
+                                  <button key={v} onClick={() => setCompVoicing(activePatIdx, bi, v)}
+                                    className={`px-1.5 py-0.5 rounded text-[9px] font-bold border transition-all ${
+                                      cfg.voicing === v ? 'bg-orange-700 border-orange-500 text-white' : 'bg-gray-800 border-gray-600 text-gray-400 hover:text-white'
+                                    }`}>{v === 'root' ? 'Fond.' : v === 'shell' ? 'Shell' : 'Plein'}</button>
+                                ))}
+                              </div>
+                              <input type="range" min={20} max={100} value={Math.round(cfg.vel * 100)}
+                                onChange={e => setCompVel(activePatIdx, bi, +e.target.value / 100)}
+                                className="flex-1 min-w-[60px] accent-orange-500" />
+                              <span className="text-[9px] text-gray-500 w-6 text-right shrink-0">{Math.round(cfg.vel * 100)}</span>
+                            </>
+                          ) : (
+                            <span className="text-[9px] text-gray-600 italic">silence</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-[9px] text-gray-600 mt-2">Shell = 3e+7e · Fond. = fondamentale · Plein = 3e+5e+7e</p>
+                </div>
+
+                {/* ── Batterie ── */}
+                <div>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Batterie — 8 croches swing</p>
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[340px]">
+                      <div className="flex gap-px mb-1 ml-[90px]">
+                        {['1','1+','2','2+','3','3+','4','4+'].map((l, i) => (
+                          <div key={i} className={`w-8 text-center text-[8px] shrink-0 ${i % 2 === 0 ? 'text-gray-400 font-bold' : 'text-gray-600'}`}>{l}</div>
+                        ))}
+                      </div>
+                      {DRUM_VOICE_KEYS.map(voice => (
+                        <div key={voice} className="flex items-center gap-px mb-0.5">
+                          <span className="text-[8px] text-gray-500 w-[90px] shrink-0 truncate pr-1 text-right">{DRUM_VOICE_LABELS[voice]}</span>
+                          {drumSteps[voice].map((on, step) => (
+                            <button key={step} onClick={() => toggleDrumStep(voice, step)}
+                              className={`w-8 h-6 rounded-sm border transition-all shrink-0 ${
+                                on
+                                  ? step % 2 === 0
+                                    ? 'bg-orange-600 border-orange-400'
+                                    : 'bg-orange-900 border-orange-700'
+                                  : 'bg-gray-800 border-gray-700 hover:border-gray-500'
+                              }`} />
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Save + Reset */}
+                <div className="flex gap-2">
+                  <button
+                    disabled={adminSaving}
+                    onClick={async () => {
+                      setAdminSaving(true);
+                      try { await saveAdminConfig({ compPatterns, drumSteps }); } catch {}
+                      setAdminSaving(false);
+                    }}
+                    className="flex-1 py-1.5 rounded-lg text-xs font-bold bg-orange-600 hover:bg-orange-500 text-white border border-orange-500 disabled:opacity-50 transition-colors">
+                    {adminSaving ? '…' : '💾 Sauvegarder pour tous'}
+                  </button>
+                  <button onClick={() => { setCompPatterns([DEFAULT_COMP_CFG.map(c => ({ ...c }))]); setActivePatIdx(0); setDrumSteps(initDrumSteps()); }}
+                    className="px-3 py-1.5 rounded-lg text-xs bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white border border-gray-700 transition-colors">
+                    ↩ Reset
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {/* ── Chord panel — right drawer ─────────────────────────────────────── */}
       {viewChord && (() => {
