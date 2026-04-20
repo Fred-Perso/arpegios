@@ -11,12 +11,21 @@ export interface AdminConfig {
 
 export function subscribeAdminConfig(cb: (cfg: AdminConfig | null) => void) {
   return onSnapshot(doc(db, 'config', 'admin'), snap => {
-    cb(snap.exists() ? (snap.data() as AdminConfig) : null);
+    if (!snap.exists()) { cb(null); return; }
+    const d = snap.data();
+    try {
+      const compPatterns = d.compPatternsJson ? JSON.parse(d.compPatternsJson) : null;
+      cb({ compPatterns, drumSteps: d.drumSteps ?? null });
+    } catch { cb(null); }
   });
 }
 
+// Firestore ne supporte pas les arrays imbriqués — compPatterns sérialisé en JSON string
 export async function saveAdminConfig(cfg: AdminConfig): Promise<void> {
-  await setDoc(doc(db, 'config', 'admin'), cfg);
+  await setDoc(doc(db, 'config', 'admin'), {
+    compPatternsJson: JSON.stringify(cfg.compPatterns),
+    drumSteps: cfg.drumSteps,
+  });
 }
 
 // Minimal chord representation stored in Firestore (name/notes are computed on load)

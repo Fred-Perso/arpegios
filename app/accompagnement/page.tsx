@@ -1491,7 +1491,11 @@ export default function AccompagnementPage() {
                     disabled={adminSaving}
                     onClick={async () => {
                       setAdminSaving(true);
-                      try { await saveAdminConfig({ compPatterns, drumSteps }); } catch {}
+                      try {
+                        await saveAdminConfig({ compPatterns, drumSteps });
+                      } catch (e) {
+                        console.error('saveAdminConfig failed:', e);
+                      }
                       setAdminSaving(false);
                     }}
                     className="flex-1 py-1.5 rounded-lg text-xs font-bold bg-orange-600 hover:bg-orange-500 text-white border border-orange-500 disabled:opacity-50 transition-colors">
