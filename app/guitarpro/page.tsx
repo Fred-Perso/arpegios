@@ -6,6 +6,7 @@ type Status = 'idle' | 'loading' | 'ready' | 'playing' | 'paused';
 
 interface ScoreInfo { title: string; artist: string; album: string; tempo: number }
 interface TrackInfo { name: string; index: number; muted: boolean; solo: boolean; volume: number }
+interface TabFile   { name: string; filename: string; size: number; ext: string }
 
 function fmt(ms: number) {
   const s = Math.floor(ms / 1000);
@@ -36,6 +37,9 @@ export default function GuitarProPage() {
   const [layout,       setLayout]      = useState<'page'|'horizontal'>('page');
   const [stave,        setStave]       = useState<'score-tab'|'tab'|'score'>('score-tab');
   const [showTracks,   setShowTracks]  = useState(false);
+  const [showLibrary,  setShowLibrary] = useState(false);
+  const [serverTabs,   setServerTabs]  = useState<TabFile[]>([]);
+  const [libLoading,   setLibLoading]  = useState(false);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -92,6 +96,33 @@ export default function GuitarProPage() {
 
     return () => { try { api?.destroy(); } catch {} };
   }, []);
+
+  // ── Server library ───────────────────────────────────────────────────────────
+  async function openLibrary() {
+    setShowLibrary(v => !v);
+    if (serverTabs.length === 0) {
+      setLibLoading(true);
+      try {
+        const res = await fetch('/api/tabs');
+        setServerTabs(await res.json());
+      } catch {}
+      setLibLoading(false);
+    }
+  }
+
+  async function loadFromServer(filename: string) {
+    if (!apiRef.current) return;
+    setShowLibrary(false);
+    setStatus('loading'); setScoreInfo(null); setTracks([]);
+    setCurrentBar(0); setCurrentMs(0); setTotalMs(0);
+    try {
+      const buf = await fetch(`/tabs/${encodeURIComponent(filename)}`).then(r => r.arrayBuffer());
+      apiRef.current.load(buf);
+    } catch (e: any) {
+      setInitError(`Impossible de charger le fichier : ${e?.message ?? String(e)}`);
+      setStatus('idle');
+    }
+  }
 
   // ── File loading ─────────────────────────────────────────────────────────────
   const handleFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -223,19 +254,25 @@ export default function GuitarProPage() {
       .at-selection div { background: rgba(249,115,22,.20) !important; }
     `}</style>
 
-    <main className="bg-gray-900 text-white flex flex-col" style={{ minHeight: '100dvh' }}>
+    <main className="bg-gray-900 text-white" style={{ paddingBottom: hasScore ? 96 : 24 }}>
 
       {/* ── Top bar ── */}
-      <div className="shrink-0 px-4 pt-4 pb-2 space-y-3">
+      <div className="px-4 pt-4 pb-2 space-y-3">
         <div className="flex items-center gap-4 flex-wrap">
           <Link href="/" className="text-orange-400 hover:text-orange-300 text-sm shrink-0">← Retour</Link>
           <h1 className="text-lg font-bold">Lecteur Guitar Pro</h1>
           <span className="text-gray-600 text-xs">.gp · .gp3 · .gp4 · .gp5 · .gpx</span>
 
-          <button onClick={() => fileInputRef.current?.click()}
-            className="ml-auto px-3 py-1.5 bg-orange-500 hover:bg-orange-400 text-white font-semibold rounded-xl text-sm transition-colors shrink-0">
-            📂 Ouvrir…
-          </button>
+          <div className="ml-auto flex gap-2 shrink-0">
+            <button onClick={openLibrary}
+              className={`px-3 py-1.5 font-semibold rounded-xl text-sm transition-colors border ${showLibrary ? 'bg-purple-700 border-purple-500 text-white' : 'bg-gray-800 border-gray-600 text-gray-300 hover:text-white hover:border-gray-400'}`}>
+              🎵 Bibliothèque
+            </button>
+            <button onClick={() => fileInputRef.current?.click()}
+              className="px-3 py-1.5 bg-orange-500 hover:bg-orange-400 text-white font-semibold rounded-xl text-sm transition-colors">
+              📂 Ouvrir…
+            </button>
+          </div>
           <input ref={fileInputRef} type="file" accept=".gp,.gp3,.gp4,.gp5,.gpx" onChange={handleFile} className="hidden" />
         </div>
 
@@ -301,16 +338,61 @@ export default function GuitarProPage() {
           </div>
         )}
 
+        {/* Library panel */}
+        {showLibrary && (
+          <div className="bg-gray-800 border border-gray-700 rounded-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
+              <p className="text-sm font-semibold text-white">Bibliothèque de tablatures</p>
+              <button onClick={() => setShowLibrary(false)} className="text-gray-500 hover:text-white text-lg leading-none">✕</button>
+            </div>
+            {libLoading && (
+              <p className="text-sm text-gray-400 animate-pulse px-4 py-6 text-center">Chargement…</p>
+            )}
+            {!libLoading && serverTabs.length === 0 && (
+              <div className="px-4 py-8 text-center space-y-2">
+                <p className="text-4xl">📂</p>
+                <p className="text-sm text-gray-400">Aucune tablature trouvée</p>
+                <p className="text-xs text-gray-600">Placez vos fichiers .gp/.gp5/.gpx dans le dossier <code className="bg-gray-700 px-1 rounded">public/tabs/</code></p>
+              </div>
+            )}
+            {!libLoading && serverTabs.length > 0 && (
+              <div className="divide-y divide-gray-700/60 max-h-72 overflow-y-auto">
+                {serverTabs.map(tab => (
+                  <button key={tab.filename} onClick={() => loadFromServer(tab.filename)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-700 transition-colors group">
+                    <span className="text-xl shrink-0">🎸</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-200 group-hover:text-white truncate font-medium">{tab.name}</p>
+                      <p className="text-[10px] text-gray-500">{tab.ext.toUpperCase()} · {(tab.size / 1024).toFixed(0)} ko</p>
+                    </div>
+                    <span className="text-xs text-gray-600 group-hover:text-orange-400 transition-colors shrink-0">Ouvrir →</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {initError && <p className="text-xs text-red-400 bg-red-900/20 border border-red-800 rounded-lg px-3 py-2">{initError}</p>}
         {status === 'loading' && <p className="text-sm text-gray-400 animate-pulse">⏳ Chargement de la partition…</p>}
       </div>
 
       {/* ── Score area ── */}
-      <div className="flex-1 overflow-auto px-4" style={{ paddingBottom: hasScore ? 120 : 16 }}>
+      <div className="px-4">
         {status === 'idle' && !initError && (
-          <div className="text-center py-24 text-gray-600 space-y-2">
+          <div className="text-center py-24 text-gray-600 space-y-3">
             <p className="text-5xl">🎸</p>
             <p className="text-sm">Ouvre un fichier Guitar Pro pour afficher la partition</p>
+            <div className="flex gap-3 justify-center flex-wrap">
+              <button onClick={openLibrary}
+                className="px-4 py-2 bg-gray-800 border border-gray-700 hover:border-gray-500 text-gray-400 hover:text-white rounded-xl text-sm transition-colors">
+                🎵 Bibliothèque du serveur
+              </button>
+              <button onClick={() => fileInputRef.current?.click()}
+                className="px-4 py-2 bg-orange-500/20 border border-orange-700/50 hover:border-orange-500 text-orange-300 rounded-xl text-sm transition-colors">
+                📂 Ouvrir un fichier local
+              </button>
+            </div>
           </div>
         )}
         <div ref={containerRef} className="rounded-2xl overflow-hidden bg-white"
