@@ -703,7 +703,8 @@ export default function AccompagnementPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function buildDrums(Tone: any, vol: number, enabled: boolean, kitDef: DrumKitDef) {
     disposeDrums();
-    const bus    = new Tone.Gain(enabled ? vol / 100 : 0).toDestination();
+    const bus    = new Tone.Volume((vol / 100) * 40 - 40).toDestination();
+    bus.mute = !enabled;
     const warmth = new Tone.Distortion({ distortion: 0.03, wet: 0.10 }).connect(bus);
     const comp   = new Tone.Compressor({ threshold: -18, ratio: 4, attack: 0.003, release: 0.12 }).connect(warmth);
 
@@ -1005,13 +1006,13 @@ export default function AccompagnementPage() {
 
   function changeDrumVol(v: number) {
     setDrumVol(v);
-    if (drumKitRef.current) drumKitRef.current.bus.gain.value = drumOn ? v / 100 : 0;
+    if (drumKitRef.current?.bus) drumKitRef.current.bus.volume.value = (v / 100) * 40 - 40;
   }
 
-  function toggleDrum() {
+function toggleDrum() {
     setDrumOn(prev => {
       const next = !prev;
-      if (drumKitRef.current) drumKitRef.current.bus.gain.value = next ? drumVol / 100 : 0;
+      if (drumKitRef.current?.bus) drumKitRef.current.bus.mute = !next;
       return next;
     });
   }
@@ -1236,53 +1237,54 @@ export default function AccompagnementPage() {
             )}
           </div>
 
-          {/* Mixer — 3 pistes séparées */}
+          {/* Mixer */}
           <div className="border-t border-gray-700 pt-3 space-y-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider w-full">Mixeur</p>
-              {/* Instrument switch */}
-              <div className="flex items-center gap-1 w-full mb-1 flex-wrap">
-                <span className="text-[10px] text-gray-400 shrink-0 w-16">Accord</span>
-                {CHORD_INSTRUMENTS.map((instr, i) => (
-                  <button key={instr.id}
-                    onClick={() => { if (status === 'idle') setInstrument(instr.id); }}
-                    className={`px-2 py-1 text-[10px] font-bold border transition-all ${
-                      i === 0 ? 'rounded-l-lg' : i === CHORD_INSTRUMENTS.length - 1 ? 'rounded-r-lg' : ''
-                    } ${
-                      instrument === instr.id
-                        ? 'bg-amber-700 border-amber-500 text-white'
-                        : 'bg-gray-700 border-gray-600 text-gray-400 hover:text-white'
-                    }`}>
-                    {instr.label}
-                  </button>
-                ))}
-              </div>
-              {[
-                { label: CHORD_INSTRUMENTS.find(i => i.id === instrument)?.label ?? '🎹 Piano', val: pianoVol, fn: changePianoVol, color: 'accent-amber-500' },
-                { label: '🎸 Basse',  val: bassVol,  fn: changeBassVol,  color: 'accent-blue-500'  },
-              ].map(({ label, val, fn, color }) => (
-                <div key={label} className="flex items-center gap-2 flex-1 min-w-[140px]">
+            <p className="text-[10px] text-gray-500 uppercase tracking-wider">Mixeur</p>
+
+            {/* Sélecteur instrument */}
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className="text-[10px] text-gray-400 w-16 shrink-0">Accord</span>
+              {CHORD_INSTRUMENTS.map((instr, i) => (
+                <button key={instr.id}
+                  onClick={() => { if (status === 'idle') setInstrument(instr.id); }}
+                  className={`px-2 py-1 text-[10px] font-bold border transition-all ${
+                    i === 0 ? 'rounded-l-lg' : i === CHORD_INSTRUMENTS.length - 1 ? 'rounded-r-lg' : ''
+                  } ${instrument === instr.id
+                    ? 'bg-amber-700 border-amber-500 text-white'
+                    : 'bg-gray-700 border-gray-600 text-gray-400 hover:text-white'
+                  }`}>
+                  {instr.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Sliders de volume — une ligne par piste */}
+            {([
+              { label: CHORD_INSTRUMENTS.find(i => i.id === instrument)?.label ?? '🎹 Piano', val: pianoVol, fn: changePianoVol, color: 'accent-amber-500', show: true },
+              { label: '🎸 Basse',  val: bassVol,  fn: changeBassVol,  color: 'accent-blue-500',   show: true },
+              { label: '🥁 Batt.',  val: drumVol,  fn: changeDrumVol,  color: 'accent-indigo-500', show: true },
+            ] as { label: string; val: number; fn: (v: number) => void; color: string; show: boolean }[])
+              .filter(r => r.show)
+              .map(({ label, val, fn, color }) => (
+                <div key={label} className="flex items-center gap-2">
                   <span className="text-[10px] text-gray-400 shrink-0 w-16">{label}</span>
                   <input type="range" min={0} max={100} value={val}
                     onChange={e => fn(+e.target.value)}
                     className={`flex-1 ${color}`} />
-                  <span className="font-mono text-[10px] text-gray-500 w-6 text-right">{val}</span>
+                  <span className="font-mono text-[10px] text-gray-500 w-6 text-right shrink-0">{val}</span>
                 </div>
-              ))}
-              <div className="flex items-center gap-2 flex-1 min-w-[140px]">
-                <button onClick={toggleDrum}
-                  className={`text-[10px] font-bold px-2 py-1 rounded border transition-all shrink-0 w-16 ${
-                    drumOn ? 'bg-indigo-700 border-indigo-500 text-white' : 'bg-gray-700 border-gray-600 text-gray-400'
-                  }`}>
-                  🥁 {drumOn ? 'ON' : 'OFF'}
-                </button>
-                {drumOn && (<>
-                  <input type="range" min={0} max={100} value={drumVol}
-                    onChange={e => changeDrumVol(+e.target.value)}
-                    className="flex-1 accent-indigo-500" />
-                  <span className="font-mono text-[10px] text-gray-500 w-6 text-right">{drumVol}</span>
-                </>)}
-              </div>
+              ))
+            }
+
+            {/* Bouton batterie ON/OFF séparé */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-gray-400 shrink-0 w-16" />
+              <button onClick={toggleDrum}
+                className={`px-3 py-1 rounded border text-[10px] font-bold transition-all ${
+                  drumOn ? 'bg-indigo-700 border-indigo-500 text-white' : 'bg-gray-700 border-gray-600 text-gray-400 hover:text-white'
+                }`}>
+                🥁 {drumOn ? 'Batterie ON' : 'Batterie OFF'}
+              </button>
             </div>
           </div>
           <div className="flex items-center gap-1 mt-2">

@@ -113,6 +113,28 @@ export default function TutoIndexPage() {
           ))}
         </div>
 
+        {/* Advanced section */}
+        <div className="pt-2">
+          <h2 className="text-xl font-bold text-gray-300 mb-1">Harmonie avancée</h2>
+          <p className="text-gray-500 text-sm mb-3">Après avoir maîtrisé le II–V–I — les outils du jazzman moderne.</p>
+          <div className="grid sm:grid-cols-2 gap-3">
+            {[
+              { href:'/tuto/enrichissements',          icon:'🎨', title:'Enrichissements',           sub:'9e, 11e, 13e — colorer les accords',                color:'border-teal-700 bg-teal-900/15 hover:bg-teal-900/25' },
+              { href:'/tuto/dominantes-secondaires',   icon:'⚡', title:'Dominantes secondaires',    sub:'Toniciser temporairement n\'importe quel accord',  color:'border-red-700 bg-red-900/15 hover:bg-red-900/25' },
+              { href:'/tuto/substitutions-tritoniques',icon:'🔄', title:'Substitutions tritoniques', sub:'Remplacer un V7 par l\'accord à 6 demi-tons',       color:'border-indigo-700 bg-indigo-900/15 hover:bg-indigo-900/25' },
+              { href:'/tuto/emprunts-modaux',          icon:'🌀', title:'Emprunts modaux',           sub:'Emprunter des accords aux modes parallèles',        color:'border-purple-700 bg-purple-900/15 hover:bg-purple-900/25' },
+              { href:'/tuto/reharmonisation',          icon:'🎭', title:'Réharmonisation',           sub:'Transformer et enrichir une grille existante',      color:'border-amber-700 bg-amber-900/15 hover:bg-amber-900/25' },
+              { href:'/tuto/analyse-standards',        icon:'🔍', title:'Analyse de standards',      sub:'Blue Bossa, All The Things You Are, Autumn Leaves', color:'border-gray-600 bg-gray-800/50 hover:bg-gray-700/50' },
+            ].map(p => (
+              <Link key={p.href} href={p.href}
+                className={`block border rounded-xl p-4 transition-colors ${p.color}`}>
+                <p className="font-bold text-white text-sm">{p.icon} {p.title}</p>
+                <p className="text-gray-400 text-xs mt-0.5">{p.sub}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+
         {/* CTA */}
         <div className="bg-gray-800 rounded-2xl p-5 flex flex-col sm:flex-row gap-4 items-center">
           <div>
