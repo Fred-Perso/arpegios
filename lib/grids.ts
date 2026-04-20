@@ -6,7 +6,7 @@ import { db } from './firebase';
 
 export interface AdminConfig {
   compPatterns: { active: boolean; voicing: string; vel: number }[][];
-  drumSteps: Record<string, boolean[]>;
+  drumPatterns: Record<string, boolean[]>[];
 }
 
 export function subscribeAdminConfig(cb: (cfg: AdminConfig | null) => void) {
@@ -15,16 +15,19 @@ export function subscribeAdminConfig(cb: (cfg: AdminConfig | null) => void) {
     const d = snap.data();
     try {
       const compPatterns = d.compPatternsJson ? JSON.parse(d.compPatternsJson) : null;
-      cb({ compPatterns, drumSteps: d.drumSteps ?? null });
+      // compat: ancien champ drumSteps (objet plat) → wrappé en tableau
+      const drumPatterns = d.drumPatterns ?? (d.drumSteps ? [d.drumSteps] : null);
+      cb({ compPatterns, drumPatterns });
     } catch { cb(null); }
   });
 }
 
-// Firestore ne supporte pas les arrays imbriqués — compPatterns sérialisé en JSON string
+// compPatterns sérialisé en JSON (Firestore n'accepte pas les arrays imbriqués)
+// drumPatterns = array d'objets plats → supporté nativement
 export async function saveAdminConfig(cfg: AdminConfig): Promise<void> {
   await setDoc(doc(db, 'config', 'admin'), {
     compPatternsJson: JSON.stringify(cfg.compPatterns),
-    drumSteps: cfg.drumSteps,
+    drumPatterns: cfg.drumPatterns,
   });
 }
 
