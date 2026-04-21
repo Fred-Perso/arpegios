@@ -51,6 +51,18 @@ const PARCOURS = [
   },
   {
     step: 5,
+    href: '/tuto/croches-ternaires',
+    title: 'Croches ternaires (swing)',
+    subtitle: 'Le secret du feeling jazz',
+    desc: "Comprendre et entendre la différence entre binaire et ternaire. Diagrammes, exemples audio, exercices.",
+    icon: '🎷',
+    color: 'border-cyan-600 bg-cyan-900/20 hover:bg-cyan-900/30',
+    badge: 'bg-cyan-700',
+    time: '10 min',
+    tag: 'Rythme essentiel',
+  },
+  {
+    step: 7,
     href: '/tuto/standard',
     title: 'Autumn Leaves — standard école',
     subtitle: 'Mettre la théorie en pratique',
@@ -62,7 +74,7 @@ const PARCOURS = [
     tag: 'Application pratique',
   },
   {
-    step: 6,
+    step: 8,
     href: '/tuto/histoire',
     title: 'L\'évolution du jazz',
     subtitle: 'De 1900 à aujourd\'hui',
@@ -125,6 +137,8 @@ export default function TutoIndexPage() {
               { href:'/tuto/emprunts-modaux',          icon:'🌀', title:'Emprunts modaux',           sub:'Emprunter des accords aux modes parallèles',        color:'border-purple-700 bg-purple-900/15 hover:bg-purple-900/25' },
               { href:'/tuto/reharmonisation',          icon:'🎭', title:'Réharmonisation',           sub:'Transformer et enrichir une grille existante',      color:'border-amber-700 bg-amber-900/15 hover:bg-amber-900/25' },
               { href:'/tuto/analyse-standards',        icon:'🔍', title:'Analyse de standards',      sub:'Blue Bossa, All The Things You Are, Autumn Leaves', color:'border-gray-600 bg-gray-800/50 hover:bg-gray-700/50' },
+              { href:'/tuto/bebop',                    icon:'🎺', title:'Style bebop',                 sub:'Gammes, encadrements, licks — le langage bebop',    color:'border-purple-700 bg-purple-900/15 hover:bg-purple-900/25' },
+              { href:'/tuto/licks-2-5-1',             icon:'🎸', title:'Licks II–V–I',                 sub:'5 guitaristes · tablature + lecteur MIDI · tempos',  color:'border-orange-700 bg-orange-900/15 hover:bg-orange-900/25' },
             ].map(p => (
               <Link key={p.href} href={p.href}
                 className={`block border rounded-xl p-4 transition-colors ${p.color}`}>

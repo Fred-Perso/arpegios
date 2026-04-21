@@ -10,7 +10,8 @@ const TUTO_BASES = [
   { href: '/tuto/modes',        label: 'Les modes'              },
   { href: '/tuto',              label: 'Harmonie majeure'       },
   { href: '/tuto/pentatonique', label: 'Pentatonique jazz'      },
-  { href: '/tuto/deux-cinq-un', label: 'II–V–I'                 },
+  { href: '/tuto/deux-cinq-un',       label: 'II–V–I'                 },
+  { href: '/tuto/croches-ternaires', label: 'Croches ternaires 🎷'  },
   { href: '/tuto/standard',     label: 'Autumn Leaves'          },
   { href: '/tuto/histoire',     label: 'Histoire du jazz'       },
 ];
@@ -22,6 +23,8 @@ const TUTO_AVANCEE = [
   { href: '/tuto/emprunts-modaux',           label: 'Emprunts modaux'        },
   { href: '/tuto/reharmonisation',           label: 'Réharmonisation'        },
   { href: '/tuto/analyse-standards',         label: 'Analyse de standards'   },
+  { href: '/tuto/bebop',                     label: 'Style bebop'             },
+  { href: '/tuto/licks-2-5-1',              label: 'Licks II–V–I 🎸'         },
 ];
 
 const MAIN_LINKS = [
